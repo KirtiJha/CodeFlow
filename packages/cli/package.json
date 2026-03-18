@@ -1,0 +1,35 @@
+{
+  "name": "@codeflow/cli",
+  "version": "0.1.0",
+  "description": "CodeFlow CLI — data-aware code intelligence",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "codeflow": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codeflow/core": "workspace:*",
+    "commander": "^13.1.0",
+    "chalk": "^5.4.1",
+    "ora": "^8.2.0",
+    "cli-table3": "^0.6.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.6",
+    "@types/node": "^22.10.0"
+  }
+}

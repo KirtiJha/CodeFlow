@@ -1,0 +1,30 @@
+{
+  "name": "@codeflow/mcp",
+  "version": "0.1.0",
+  "description": "CodeFlow MCP server — Model Context Protocol integration",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codeflow/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.6",
+    "@types/node": "^22.10.0"
+  }
+}

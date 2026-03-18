@@ -1,0 +1,33 @@
+{
+  "name": "@codeflow/server",
+  "version": "0.1.0",
+  "description": "CodeFlow HTTP API server — Hono-based REST + SSE",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codeflow/core": "workspace:*",
+    "hono": "^4.7.0",
+    "@hono/node-server": "^1.14.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.6",
+    "@types/node": "^22.10.0"
+  }
+}
