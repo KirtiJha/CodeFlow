@@ -28,7 +28,23 @@ export const useTraceStore = create<TraceState>((set) => ({
   selectNode: (node) => set({ selectedNode: node }),
   setTracing: (tracing) => set({ isTracing: tracing }),
   addToHistory: (query) =>
-    set((state) => ({ history: [query, ...state.history].slice(0, 20) })),
+    set((state) => {
+      const keyOf = (q: TraceQuery) =>
+        [
+          q.mode,
+          q.sessionId ?? "",
+          q.symbol ?? "",
+          q.direction,
+          q.depth,
+          q.includeTests ? "1" : "0",
+          q.observedOnly ? "1" : "0",
+          (q.edgeKinds ?? []).slice().sort().join("|"),
+        ].join("::");
+
+      const queryKey = keyOf(query);
+      const deduped = state.history.filter((h) => keyOf(h) !== queryKey);
+      return { history: [query, ...deduped].slice(0, 20) };
+    }),
   reset: () =>
     set({ result: null, query: null, selectedNode: null, isTracing: false }),
 }));

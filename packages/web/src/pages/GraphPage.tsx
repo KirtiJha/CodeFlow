@@ -33,9 +33,64 @@ export function GraphPage() {
   });
   const { activePanels } = useUIStore();
 
+  const filteredGraphData = useMemo<GraphData | null>(() => {
+    if (!graphData) return null;
+
+    const q = filter.searchQuery.trim().toLowerCase();
+    const hasKindFilter = filter.kinds.length > 0;
+    const hasLanguageFilter = filter.languages.length > 0;
+    const hasCommunityFilter = filter.communities.length > 0;
+
+    const nodes = graphData.nodes.filter((n) => {
+      if (hasKindFilter && !filter.kinds.includes(n.kind)) return false;
+      if (hasLanguageFilter && !filter.languages.includes(n.language)) return false;
+      if (hasCommunityFilter && (!n.community || !filter.communities.includes(n.community))) return false;
+      if (!filter.showTests && n.isTest) return false;
+      if (!filter.showEntryPoints && n.isEntryPoint) return false;
+
+      const risk = n.riskScore ?? 0;
+      if (risk < filter.minRisk) return false;
+
+      if (q) {
+        const haystack = `${n.name} ${n.label} ${n.file} ${n.kind}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
+      return true;
+    });
+
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges = graphData.edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
+    );
+
+    const communities = graphData.communities
+      .map((c) => ({
+        ...c,
+        nodeCount: nodes.filter((n) => n.community === c.id).length,
+      }))
+      .filter((c) => c.nodeCount > 0);
+
+    return {
+      nodes,
+      edges,
+      communities,
+      stats: {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        communityCount: communities.length,
+        density:
+          nodes.length > 1
+            ? (2 * edges.length) / (nodes.length * (nodes.length - 1))
+            : 0,
+        avgDegree: nodes.length > 0 ? (2 * edges.length) / nodes.length : 0,
+      },
+    };
+  }, [graphData, filter]);
+
   const graphInstance = useMemo<Graph | null>(
-    () => (graphData ? buildGraphologyInstance(graphData) : null),
-    [graphData],
+    () => (filteredGraphData ? buildGraphologyInstance(filteredGraphData) : null),
+    [filteredGraphData],
   );
 
   const availableKinds = useMemo(
@@ -164,7 +219,7 @@ export function GraphPage() {
             <div className="relative flex-1 min-w-0 h-full overflow-hidden">
               <GraphCanvas
                 ref={canvasRef}
-                data={graphData}
+                data={filteredGraphData}
                 onNodeClick={handleGraphNodeClick}
               />
 

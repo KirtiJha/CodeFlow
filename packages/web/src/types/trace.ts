@@ -3,7 +3,16 @@ export interface TraceResult {
   edges: TraceEdge[];
   depth: number;
   direction: "forward" | "backward" | "both";
+  mode?: TraceMode;
+  runtimeSource?: "observed" | "bootstrapped" | "mixed";
+  observedEdgeCount?: number;
+  bootstrappedEdgeCount?: number;
+  requestedDirection?: "forward" | "backward" | "both";
+  fallbackUsed?: boolean;
+  sessionId?: string;
 }
+
+export type TraceMode = "static" | "runtime";
 
 export interface TraceNode {
   id: string;
@@ -11,6 +20,7 @@ export interface TraceNode {
   kind: string;
   file: string;
   line: number;
+  endLine?: number;
   column: number;
   depth: number;
   language: string;
@@ -34,4 +44,8 @@ export interface TraceQuery {
   depth: number;
   direction: "forward" | "backward" | "both";
   includeTests: boolean;
+  edgeKinds: string[];
+  mode: TraceMode;
+  sessionId?: string;
+  observedOnly?: boolean;
 }

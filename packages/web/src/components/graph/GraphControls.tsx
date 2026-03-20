@@ -130,13 +130,13 @@ export function GraphControls({
             {/* Risk slider */}
             <div>
               <label className="mb-1 block text-[10px] font-medium uppercase text-text-muted">
-                Min Risk: {filter.minRisk.toFixed(1)}
+                Min Risk: {Math.round(filter.minRisk)}
               </label>
               <input
                 type="range"
                 min={0}
-                max={1}
-                step={0.1}
+                max={100}
+                step={1}
                 value={filter.minRisk}
                 onChange={(e) =>
                   onFilterChange({ minRisk: parseFloat(e.target.value) })

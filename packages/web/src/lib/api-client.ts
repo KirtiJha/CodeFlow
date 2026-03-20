@@ -1,5 +1,6 @@
 import ky from "ky";
 import type { ApiResponse } from "@/types/api";
+import type { TraceMode } from "@/types/trace";
 
 const client = ky.create({
   prefixUrl: "/api",
@@ -70,13 +71,126 @@ export const api = {
       .json<ApiResponse<unknown>>(),
 
   // Trace
+  traceStaticOrRuntime: (params: {
+    file: string;
+    symbol?: string;
+    from?: string;
+    line?: number;
+    depth?: number;
+    direction?: "forward" | "backward" | "both";
+    includeTests?: boolean;
+    edgeKinds?: string[];
+    sessionId?: string;
+    mode?: TraceMode;
+    observedOnly?: boolean;
+  }) =>
+    params.mode === "runtime"
+      ? client.post("trace/runtime", { json: params }).json<TraceApiResponse>()
+      : client.post("trace", { json: params }).json<TraceApiResponse>(),
+
   trace: (params: {
     file: string;
     symbol?: string;
+    from?: string;
     line?: number;
     depth?: number;
-    direction?: string;
-  }) => client.post("trace", { json: params }).json<ApiResponse<unknown>>(),
+    direction?: "forward" | "backward" | "both";
+    includeTests?: boolean;
+    edgeKinds?: string[];
+  }) =>
+    client.post("trace", { json: params }).json<
+      ApiResponse<{
+        nodes: Array<{
+          id: string;
+          name: string;
+          kind: string;
+          file: string;
+          line: number;
+          column: number;
+          depth: number;
+          language: string;
+          codeSnippet?: string;
+        }>;
+        edges: Array<{
+          id: string;
+          source: string;
+          target: string;
+          kind: string;
+          weight: number;
+        }>;
+        depth: number;
+        direction: "forward" | "backward" | "both";
+        requestedDirection?: "forward" | "backward" | "both";
+        fallbackUsed?: boolean;
+      }>
+    >(),
+
+  traceSuggest: (q: string, limit = 10) =>
+    client
+      .get(`trace/suggest?q=${encodeURIComponent(q)}&limit=${limit}`)
+      .json<
+        ApiResponse<{
+          suggestions: Array<{
+            id: string;
+            symbol: string;
+            file: string;
+            line: number;
+            kind: string;
+            language: string;
+          }>;
+        }>
+      >(),
+
+  traceRuntimeSuggest: (q: string, limit = 10, sessionId?: string) => {
+    const s = sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : "";
+    return client
+      .get(`trace/runtime/suggest?q=${encodeURIComponent(q)}&limit=${limit}${s}`)
+      .json<
+        ApiResponse<{
+          suggestions: Array<{
+            id: string;
+            symbol: string;
+            file: string;
+            line: number;
+            kind: string;
+            language: string;
+          }>;
+        }>
+      >();
+  },
+
+  traceRuntimeSessions: (limit = 20) =>
+    client
+      .get(`trace/runtime/sessions?limit=${limit}`)
+      .json<
+        ApiResponse<{
+          sessions: Array<{
+            id: string;
+            created_at_ms: number;
+            updated_at_ms: number;
+            edge_count: number;
+            observed_edge_count: number;
+            bootstrapped_edge_count: number;
+          }>;
+        }>
+      >(),
+
+  ingestRuntimeTraceEvents: (params: {
+    sessionId?: string;
+    events: Array<{
+      timestamp?: number;
+      kind?: string;
+      fromNodeId?: string;
+      toNodeId?: string;
+      from?: string;
+      to?: string;
+      fromFile?: string;
+      toFile?: string;
+      fromLine?: number;
+      toLine?: number;
+      metadata?: Record<string, unknown>;
+    }>;
+  }) => client.post("trace/runtime/events", { json: params }).json<ApiResponse<{ sessionId: string; ingested: number }>>(),
 
   // Tests
   testImpact: (changedFiles: string[]) =>
@@ -146,6 +260,36 @@ export const api = {
       .post("impact", { json: { nodeId, depth } })
       .json<ApiResponse<unknown>>(),
 };
+
+type TraceApiResponse = ApiResponse<{
+  nodes: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    file: string;
+    line: number;
+    column: number;
+    depth: number;
+    language: string;
+    codeSnippet?: string;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    kind: string;
+    weight: number;
+  }>;
+  depth: number;
+  direction: "forward" | "backward" | "both";
+  mode?: TraceMode;
+  sessionId?: string;
+  runtimeSource?: "observed" | "bootstrapped" | "mixed";
+  observedEdgeCount?: number;
+  bootstrappedEdgeCount?: number;
+  requestedDirection?: "forward" | "backward" | "both";
+  fallbackUsed?: boolean;
+}>;
 
 export interface NodeDetailResponse {
   node: {
