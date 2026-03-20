@@ -27,7 +27,6 @@ import {
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { isAnalyzed } = useAppStore();
   const { stats, progress, isRunning } = useAnalysisStore();
   const { conflicts } = useBranchStore();
   const { score } = useSecurityStore();
@@ -41,19 +40,31 @@ export function DashboardPage() {
     useAnalysisStore.getState().setStats((data as { stats: import("@/types/analysis").AnalysisStats }).stats);
   });
 
-  // Load initial data
+  // Load initial data (check status on mount)
   useEffect(() => {
-    if (!isAnalyzed) return;
-
     api
       .getStatus()
       .then((status) => {
-        if (status.data?.stats) {
-          useAnalysisStore.getState().setStats(status.data.stats as unknown as import("@/types/analysis").AnalysisStats);
+        if (status.data?.stats && status.data.indexed) {
+          const s = status.data.stats;
+          useAnalysisStore.getState().setStats({
+            totalFiles: s.files ?? 0,
+            totalNodes: s.nodes ?? 0,
+            totalEdges: s.edges ?? 0,
+            totalSymbols: (s.functions ?? 0) + (s.classes ?? 0),
+            totalFunctions: s.functions ?? 0,
+            totalClasses: s.classes ?? 0,
+            totalCommunities: s.communities ?? 0,
+            functions: s.functions ?? 0,
+            classes: s.classes ?? 0,
+            communities: s.communities ?? 0,
+            callEdges: s.edges ?? 0,
+          } as import("@/types/analysis").AnalysisStats);
+          useAppStore.getState().setAnalyzed(true);
         }
       })
       .catch(() => {});
-  }, [isAnalyzed]);
+  }, []);
 
   const criticalConflicts = conflicts.filter(
     (c) => c.severity === "critical",

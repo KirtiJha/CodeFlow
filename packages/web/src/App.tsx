@@ -1,10 +1,13 @@
+import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { TooltipProvider } from "@/components/shared/Tooltip";
 import { useUIStore } from "@/stores/ui-store";
+import { useAppStore } from "@/stores/app-store";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { TracePage } from "@/pages/TracePage";
@@ -20,7 +23,22 @@ export default function App() {
   const { sidebarCollapsed, commandPaletteOpen, setCommandPaletteOpen } =
     useUIStore();
 
+  // Periodically check backend connectivity
+  useEffect(() => {
+    const { setConnected } = useAppStore.getState();
+    let alive = true;
+    const check = () => {
+      fetch("/api/graph", { method: "HEAD" })
+        .then((r) => { if (alive) setConnected(r.ok); })
+        .catch(() => { if (alive) setConnected(false); });
+    };
+    check();
+    const id = setInterval(check, 15_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
   return (
+    <TooltipProvider>
     <div className="flex h-screen w-screen overflow-hidden bg-bg-base text-text-primary">
       <Sidebar collapsed={sidebarCollapsed} />
 
@@ -53,5 +71,6 @@ export default function App() {
         onOpenChange={setCommandPaletteOpen}
       />
     </div>
+    </TooltipProvider>
   );
 }

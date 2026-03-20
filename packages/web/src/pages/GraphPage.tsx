@@ -1,25 +1,26 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
-import { Allotment } from "allotment";
-import "allotment/dist/style.css";
 import Graph from "graphology";
 import { GraphCanvas } from "@/components/graph/GraphCanvas";
+import type { GraphCanvasHandle } from "@/components/graph/GraphCanvas";
 import { GraphControls } from "@/components/graph/GraphControls";
 import { GraphLegend } from "@/components/graph/GraphLegend";
 import { GraphMinimap } from "@/components/graph/GraphMinimap";
-import { CodeViewer } from "@/components/code/CodeViewer";
+import { GraphCodeViewer } from "@/components/code/GraphCodeViewer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { Badge } from "@/components/shared/Badge";
 import { useUIStore } from "@/stores/ui-store";
 import { api } from "@/lib/api-client";
+import type { NodeDetailResponse } from "@/lib/api-client";
 import { PAGE_VARIANTS } from "@/lib/constants";
-import { buildGraphologyInstance } from "@/lib/graph-adapter";
+import { buildGraphologyInstance, apiNodesToGraphNodes, apiEdgesToGraphEdges } from "@/lib/graph-adapter";
 import type { GraphData, GraphNodeData, GraphFilter } from "@/types/graph";
 
 export function GraphPage() {
+  const canvasRef = useRef<GraphCanvasHandle>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
+  const [nodeDetail, setNodeDetail] = useState<NodeDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [filter, setFilter] = useState<GraphFilter>({
     kinds: [],
@@ -46,7 +47,28 @@ export function GraphPage() {
     setIsLoading(true);
     try {
       const res = await api.graph();
-      setGraphData(res.data as GraphData);
+      const raw = res.data as { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] };
+      const nodes = apiNodesToGraphNodes(raw.nodes);
+      const edges = apiEdgesToGraphEdges(raw.edges);
+      const communities = [...new Set(nodes.map((n) => n.community).filter(Boolean))].map((id) => ({
+        id: id!,
+        label: `Community ${id}`,
+        nodeCount: nodes.filter((n) => n.community === id).length,
+        color: "#666",
+        topNodes: [],
+      }));
+      setGraphData({
+        nodes,
+        edges,
+        communities,
+        stats: {
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          communityCount: communities.length,
+          density: nodes.length > 1 ? (2 * edges.length) / (nodes.length * (nodes.length - 1)) : 0,
+          avgDegree: nodes.length > 0 ? (2 * edges.length) / nodes.length : 0,
+        },
+      });
     } catch {
       // handled
     } finally {
@@ -58,13 +80,62 @@ export function GraphPage() {
     loadGraph();
   }, [loadGraph]);
 
-  const handleNodeClick = useCallback(
-    (nodeId: string) => {
+  const openNodeDetail = useCallback(
+    async (nodeId: string, zoomToNode = false) => {
       const node = graphData?.nodes.find((n) => n.id === nodeId) ?? null;
-      setSelectedNode(node);
+      // Even if not in the current graph view, still load detail panel
+      setSelectedNode(
+        node
+          ? { ...node }
+          : { id: nodeId, name: nodeId, kind: "function", file: "", line: 0 } as GraphNodeData,
+      );
+      setNodeDetail(null);
+      // Only zoom when navigating from code-panel badges/chips.
+      // Direct graph clicks should not move the camera unexpectedly.
+      if (zoomToNode) {
+        canvasRef.current?.zoomToNode(nodeId);
+      }
+      try {
+        const res = await api.nodeDetail(nodeId);
+        if (res.data) {
+          setNodeDetail(res.data);
+          // Update selectedNode with real info from detail response
+          if (!node) {
+            const d = res.data.node;
+            setSelectedNode({
+              id: d.id,
+              name: d.name,
+              kind: d.kind,
+              file: d.file,
+              line: d.line,
+            } as GraphNodeData);
+          }
+        }
+      } catch {
+        // detail not available
+      }
     },
     [graphData],
   );
+
+  const handleGraphNodeClick = useCallback(
+    (nodeId: string) => {
+      void openNodeDetail(nodeId, false);
+    },
+    [openNodeDetail],
+  );
+
+  const handleCodeNavigate = useCallback(
+    (nodeId: string) => {
+      void openNodeDetail(nodeId, true);
+    },
+    [openNodeDetail],
+  );
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedNode(null);
+    setNodeDetail(null);
+  }, []);
 
   const handleFilterChange = useCallback(
     (partial: Partial<GraphFilter>) => {
@@ -88,106 +159,67 @@ export function GraphPage() {
             <LoadingSpinner size="lg" />
           </div>
         ) : graphData ? (
-          <Allotment>
-            {/* Graph canvas */}
-            <Allotment.Pane minSize={400}>
-              <div className="relative h-full w-full">
-                <GraphCanvas
-                  data={graphData}
-                  onNodeClick={handleNodeClick}
-                />
+          <div className="flex h-full">
+            {/* Graph canvas — always mounted, flex-grows to fill space */}
+            <div className="relative flex-1 min-w-0 h-full overflow-hidden">
+              <GraphCanvas
+                ref={canvasRef}
+                data={graphData}
+                onNodeClick={handleGraphNodeClick}
+              />
 
-                {/* Overlay controls */}
-                <div className="absolute left-3 top-3 z-10">
-                  <GraphControls
-                    filter={filter}
-                    onFilterChange={handleFilterChange}
-                    onZoomIn={() => {}}
-                    onZoomOut={() => {}}
-                    onFit={() => {}}
-                    onReLayout={loadGraph}
-                    availableKinds={availableKinds}
-                    availableLanguages={[]}
-                    availableCommunities={[]}
+              {/* Overlay controls */}
+              <div className="absolute left-3 top-3 z-10">
+                <GraphControls
+                  filter={filter}
+                  onFilterChange={handleFilterChange}
+                  onZoomIn={() => {}}
+                  onZoomOut={() => {}}
+                  onFit={() => {}}
+                  onReLayout={loadGraph}
+                  availableKinds={availableKinds}
+                  availableLanguages={[]}
+                  availableCommunities={[]}
+                />
+              </div>
+
+              {/* Legend overlay */}
+              {activePanels.legend && (
+                <div className="absolute bottom-3 left-3 z-10">
+                  <GraphLegend kinds={availableKinds} />
+                </div>
+              )}
+
+              {/* Minimap overlay */}
+              {activePanels.minimap && graphInstance && (
+                <div className="absolute bottom-3 right-3 z-10">
+                  <GraphMinimap
+                    graph={graphInstance}
+                    viewportX={0.5}
+                    viewportY={0.5}
+                    viewportRatio={1}
                   />
                 </div>
+              )}
+            </div>
 
-                {/* Legend overlay */}
-                {activePanels.legend && (
-                  <div className="absolute bottom-3 left-3 z-10">
-                    <GraphLegend kinds={availableKinds} />
-                  </div>
-                )}
-
-                {/* Minimap overlay */}
-                {activePanels.minimap && graphInstance && (
-                  <div className="absolute bottom-3 right-3 z-10">
-                    <GraphMinimap
-                      graph={graphInstance}
-                      viewportX={0.5}
-                      viewportY={0.5}
-                      viewportRatio={1}
-                    />
+            {/* Detail panel — slides in from right, never remounts the graph */}
+            {selectedNode && (
+              <div className="h-full w-[440px] shrink-0 border-l border-border-default overflow-hidden">
+                {nodeDetail ? (
+                  <GraphCodeViewer
+                    detail={nodeDetail}
+                    onNodeNavigate={handleCodeNavigate}
+                    onClose={handleCloseDetail}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-text-muted">
+                    <LoadingSpinner size="sm" />
                   </div>
                 )}
               </div>
-            </Allotment.Pane>
-
-            {/* Detail panel */}
-            {activePanels.detail && selectedNode && (
-              <Allotment.Pane minSize={280} preferredSize={380}>
-                <div className="flex h-full flex-col border-l border-border-default">
-                  <div className="border-b border-border-default px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-text-primary">
-                        {selectedNode.name}
-                      </span>
-                      <Badge variant="kind" value={selectedNode.kind} />
-                    </div>
-                    <div className="text-xs text-text-muted">
-                      {selectedNode.file}
-                      {selectedNode.line ? `:${selectedNode.line}` : ""}
-                    </div>
-                    {selectedNode.community !== undefined && (
-                      <div className="mt-1 text-xs text-text-muted">
-                        Community: {selectedNode.community}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Connections */}
-                  {(selectedNode.inDegree || selectedNode.outDegree) && (
-                    <div className="border-b border-border-default px-4 py-2">
-                      <div className="flex items-center gap-4 text-xs text-text-muted">
-                        <span>In: {selectedNode.inDegree ?? 0}</span>
-                        <span>Out: {selectedNode.outDegree ?? 0}</span>
-                        {selectedNode.riskScore !== undefined && (
-                          <span>Risk: {selectedNode.riskScore}</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Code preview */}
-                  <div className="flex-1 overflow-auto">
-                    {selectedNode.codeSnippet ? (
-                      <CodeViewer
-                        code={selectedNode.codeSnippet}
-                        language={selectedNode.language ?? "typescript"}
-                        highlightLines={
-                          selectedNode.line ? [selectedNode.line] : []
-                        }
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-text-muted">
-                        No code preview available
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Allotment.Pane>
             )}
-          </Allotment>
+          </div>
         ) : (
           <EmptyState
             icon="graph"

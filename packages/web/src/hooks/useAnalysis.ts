@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { useAppStore } from "@/stores/app-store";
 import { useAnalysisStore } from "@/stores/analysis-store";
+import type { AnalysisStats } from "@/types/analysis";
 
 
 export function useAnalysis() {
@@ -60,6 +61,23 @@ export function useAnalysis() {
           if (status === "completed") {
             setRunning(false);
             const statusResponse = await api.getStatus();
+            const serverStats = statusResponse.data.stats;
+            // Map server field names to AnalysisStats interface
+            const mappedStats: Partial<AnalysisStats> = {
+              totalFiles: serverStats.files ?? 0,
+              totalNodes: serverStats.nodes ?? 0,
+              totalEdges: serverStats.edges ?? 0,
+              totalSymbols: (serverStats.functions ?? 0) + (serverStats.classes ?? 0),
+              totalFunctions: serverStats.functions ?? 0,
+              totalClasses: serverStats.classes ?? 0,
+              totalCommunities: serverStats.communities ?? 0,
+              functions: serverStats.functions ?? 0,
+              classes: serverStats.classes ?? 0,
+              communities: serverStats.communities ?? 0,
+              callEdges: serverStats.edges ?? 0,
+            };
+            useAnalysisStore.getState().setStats(mappedStats as AnalysisStats);
+            useAppStore.getState().setAnalyzed(true);
             const job = {
               id: jobId,
               status: "completed" as const,
@@ -71,7 +89,7 @@ export function useAnalysis() {
             setCurrentJob(job);
             addToHistory(job);
             toast.success("Analysis complete", {
-              description: `${Object.values(statusResponse.data.stats).reduce((a, b) => a + b, 0)} items indexed`,
+              description: `${mappedStats.totalNodes} nodes, ${mappedStats.totalFiles} files indexed`,
             });
             return;
           }

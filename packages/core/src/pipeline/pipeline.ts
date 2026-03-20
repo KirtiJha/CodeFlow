@@ -90,7 +90,6 @@ export class Pipeline {
   }
 
   async run(): Promise<PipelineResult> {
-    const repoId = uuid();
     const dbPath = resolve(this.config.repoPath, ".codeflow", "codeflow.db");
 
     log.info({ repoPath: this.config.repoPath, dbPath }, "Pipeline starting");
@@ -105,7 +104,20 @@ export class Pipeline {
     db.pragma("temp_store = MEMORY");
     initializeSchema(db);
 
-    // Register this repo
+    // Reuse existing repo record or create a new one; clear stale data on re-analysis
+    const existingRepo = db.prepare(
+      `SELECT id FROM repos WHERE path = ?`,
+    ).get(this.config.repoPath) as { id: string } | undefined;
+
+    const repoId = existingRepo?.id ?? uuid();
+
+    if (existingRepo) {
+      // Clear old analysis data — CASCADE will clean nodes, edges, etc.
+      db.prepare(`DELETE FROM nodes WHERE repo_id = ?`).run(repoId);
+      db.prepare(`DELETE FROM edges WHERE repo_id = ?`).run(repoId);
+    }
+
+    // Register / update this repo
     db.prepare(
       `INSERT OR REPLACE INTO repos (id, name, path, branch, analyzed_at)
        VALUES (?, ?, ?, ?, datetime('now'))`,
@@ -265,9 +277,9 @@ export class Pipeline {
               ? `${sym.parentName}.${sym.name}`
               : `${filePath}::${sym.name}`,
             filePath,
-            startLine: sym.startLine,
-            endLine: sym.endLine,
-            language: sym.language,
+            startLine: sym.startLine ?? sym.location?.start.line,
+            endLine: sym.endLine ?? sym.location?.end.line,
+            language: sym.language ?? lang as Language,
             signature: sym.signature,
             paramCount: sym.paramCount,
             returnType: sym.returnType,
@@ -751,8 +763,9 @@ export class Pipeline {
     let processed = 0;
     for (const fn of functions) {
       try {
-        // Complexity needs CFG — skip in main pipeline (computed per-function in workers)
-        // Risk score
+        // Risk score — pass graph so blast radius and transitive callers work.
+        // Complexity/churn/test data are not available in this phase,
+        // so the scorer uses defaults for those factors.
         const risk = riskScorer.score(fn.id, graph);
         fn.riskScore = risk.score;
         processed++;

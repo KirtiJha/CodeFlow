@@ -189,7 +189,19 @@ function rowToNode(row: NodeRow): GraphNode {
     name: row.name,
     qualifiedName: row.qualified_name ?? undefined,
     filePath: row.file_path,
+    startLine: row.start_line ?? undefined,
+    endLine: row.end_line ?? undefined,
     language: (row.language as Language) ?? undefined,
+    signature: row.signature ?? undefined,
+    paramCount: row.param_count ?? undefined,
+    returnType: row.return_type ?? undefined,
+    ownerId: row.owner_id ?? undefined,
+    communityId: row.community_id ?? undefined,
+    complexityCyclomatic: row.complexity_cyclomatic ?? undefined,
+    complexityCognitive: row.complexity_cognitive ?? undefined,
+    riskScore: row.risk_score ?? undefined,
+    isTest: row.is_test === 1,
+    isEntryPoint: row.is_entry_point === 1,
     location:
       row.start_line != null
         ? {

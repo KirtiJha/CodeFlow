@@ -1,10 +1,15 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import Graph from "graphology";
 import { useGraph } from "@/hooks/useGraph";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { GraphData } from "@/types/graph";
 import { buildGraphologyInstance } from "@/lib/graph-adapter";
+
+export interface GraphCanvasHandle {
+  zoomToNode: (nodeId: string) => void;
+  refresh: () => void;
+}
 
 interface GraphCanvasProps {
   data: GraphData | null;
@@ -14,13 +19,13 @@ interface GraphCanvasProps {
   className?: string;
 }
 
-export function GraphCanvas({
+export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(function GraphCanvas({
   data,
   isLoading,
   onNodeClick,
   onNodeHover,
   className = "",
-}: GraphCanvasProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
 
@@ -33,12 +38,14 @@ export function GraphCanvas({
     }
   }, [data]);
 
-  const { runLayout, zoomToFit } = useGraph({
+  const { runLayout, zoomToFit, zoomToNode, refresh } = useGraph({
     container: containerRef.current,
     graph,
     onNodeClick,
     onNodeHover,
   });
+
+  useImperativeHandle(ref, () => ({ zoomToNode, refresh }), [zoomToNode, refresh]);
 
   // Run layout after graph is ready
   useEffect(() => {
@@ -70,8 +77,8 @@ export function GraphCanvas({
   }
 
   return (
-    <div className={`relative ${className}`}>
-      <div ref={containerRef} className="h-full w-full" />
+    <div className={`relative h-full w-full overflow-hidden ${className}`}>
+      <div ref={containerRef} className="absolute inset-0 overflow-hidden" />
 
       {/* Quick actions overlay */}
       <div className="absolute bottom-4 right-4 flex gap-2">
@@ -90,4 +97,4 @@ export function GraphCanvas({
       </div>
     </div>
   );
-}
+});

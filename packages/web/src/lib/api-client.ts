@@ -46,7 +46,7 @@ export const api = {
   getStatus: () =>
     client
       .get("status")
-      .json<ApiResponse<{ repoPath: string; stats: Record<string, number> }>>(),
+      .json<ApiResponse<{ indexed: boolean; repoPath: string; stats: Record<string, number> }>>(),
 
   // Branches
   getBranches: () =>
@@ -131,8 +131,65 @@ export const api = {
       .get("graph")
       .json<ApiResponse<{ nodes: unknown[]; edges: unknown[] }>>(),
 
+  getSource: (file: string, startLine?: number, endLine?: number) =>
+    client
+      .post("source", { json: { file, startLine, endLine } })
+      .json<ApiResponse<{ file: string; content: string; startLine: number; endLine: number; totalLines: number }>>(),
+
+  nodeDetail: (nodeId: string) =>
+    client
+      .post("node-detail", { json: { nodeId } })
+      .json<ApiResponse<NodeDetailResponse>>(),
+
   impact: (nodeId: string, depth?: number) =>
     client
       .post("impact", { json: { nodeId, depth } })
       .json<ApiResponse<unknown>>(),
 };
+
+export interface NodeDetailResponse {
+  node: {
+    id: string;
+    name: string;
+    qualifiedName?: string;
+    kind: string;
+    file: string;
+    line: number;
+    endLine: number;
+    language: string;
+    signature?: string;
+    isTest: boolean;
+    isEntryPoint: boolean;
+    riskScore: number;
+    complexity: number;
+  };
+  fileContent: string;
+  totalLines: number;
+  siblings: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    line: number;
+    endLine: number;
+    language: string;
+    isTest: boolean;
+    isEntryPoint: boolean;
+    signature: string | null;
+  }>;
+  callees: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    edgeKind: string;
+    file: string;
+    line: number;
+  }>;
+  callers: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    edgeKind: string;
+    file: string;
+    line: number;
+  }>;
+}
