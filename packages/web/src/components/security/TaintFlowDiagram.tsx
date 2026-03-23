@@ -11,7 +11,7 @@ import {
   Handle,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { TaintFlow, TaintSeverity } from "@/types/security";
+import type { TaintFlow } from "@/types/security";
 
 /* ── Severity config ─────────────────────────────────────────── */
 const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -282,7 +282,6 @@ export function TaintFlowDiagram({
 }: TaintFlowDiagramProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hasSize, setHasSize] = useState(false);
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -328,10 +327,8 @@ export function TaintFlowDiagram({
     const activeFile = selectedFlow ? (selectedFlow.sink?.file || selectedFlow.source?.file) : null;
     const activeCat = selectedFlow?.category ?? null;
     const hasSelection = !!selectedFlow;
-    const hoveredFile = hoveredNodeId?.startsWith("file-") ? hoveredNodeId.slice(5) : null;
-    const hoveredCat = hoveredNodeId?.startsWith("cat-") ? hoveredNodeId.slice(4) : null;
-    const focusFile = activeFile || hoveredFile;
-    const focusCat = activeCat || hoveredCat;
+    const focusFile = activeFile;
+    const focusCat = activeCat;
 
     /* 3. Sort categories by severity and count */
     const sortedCats = [...byCat.entries()].sort((a, b) => {
@@ -375,7 +372,7 @@ export function TaintFlowDiagram({
       for (const s of fg.sevs) sevCounts[s] = (sevCounts[s] ?? 0) + 1;
 
       const isConnected = focusCat ? fg.cats.has(focusCat) : focusFile === file;
-      const isDimmed = (hasSelection || hoveredNodeId) && !isConnected && focusFile !== file;
+      const isDimmed = hasSelection && !isConnected && focusFile !== file;
 
       nodeList.push({
         id: `file-${file}`,
@@ -399,7 +396,7 @@ export function TaintFlowDiagram({
       for (const s of cg.sevs) sevCounts[s] = (sevCounts[s] ?? 0) + 1;
 
       const isConnected = focusFile ? cg.files.has(focusFile) : focusCat === cat;
-      const isDimmed = (hasSelection || hoveredNodeId) && !isConnected && focusCat !== cat;
+      const isDimmed = hasSelection && !isConnected && focusCat !== cat;
 
       nodeList.push({
         id: `cat-${cat}`,
@@ -444,7 +441,7 @@ export function TaintFlowDiagram({
         const isActive =
           (focusFile === file && (!focusCat || focusCat === cat)) ||
           (focusCat === cat && (!focusFile || focusFile === file));
-        const isDimmed = (hasSelection || hoveredNodeId) && !isActive;
+        const isDimmed = hasSelection && !isActive;
 
         edgeList.push({
           id: `e-${file}-${cat}`,
@@ -492,7 +489,7 @@ export function TaintFlowDiagram({
     }
 
     return { nodes: nodeList, edges: edgeList, fileToCategories: f2c };
-  }, [flows, selectedFlowId, hoveredNodeId, overallScore, overallGrade]);
+  }, [flows, selectedFlowId, overallScore, overallGrade]);
 
   /* ── Interaction handlers ──────────────────────────────────── */
   const onNodeClick = useCallback(
@@ -516,13 +513,7 @@ export function TaintFlowDiagram({
     [flows, onFlowSelect],
   );
 
-  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
-    setHoveredNodeId(node.id);
-  }, []);
 
-  const onNodeMouseLeave = useCallback(() => {
-    setHoveredNodeId(null);
-  }, []);
 
   if (flows.length === 0) {
     return (
@@ -544,8 +535,6 @@ export function TaintFlowDiagram({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
         fitView
         fitViewOptions={{ padding: 0.12, maxZoom: 1.2 }}
         minZoom={0.3}
@@ -556,12 +545,14 @@ export function TaintFlowDiagram({
         <Background color="#15152a" gap={24} size={1} />
         <Controls
           position="bottom-left"
+          showInteractive={false}
           style={{
             background: "#0e0e18",
             border: "1px solid #2a2a3e",
             borderRadius: "8px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
           }}
+          className="security-graph-controls"
         />
       </ReactFlow>
       )}

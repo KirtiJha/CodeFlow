@@ -158,3 +158,22 @@
 .transition-layout {
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Security graph controls — make buttons visible on dark background */
+.security-graph-controls button {
+  background: #12121c !important;
+  border-bottom: 1px solid #2a2a3e !important;
+  color: #a0a0b8 !important;
+  fill: #a0a0b8 !important;
+}
+.security-graph-controls button:hover {
+  background: #1e1e36 !important;
+  color: #e0e0f0 !important;
+  fill: #e0e0f0 !important;
+}
+.security-graph-controls button svg {
+  fill: currentColor !important;
+}
+.security-graph-controls button path {
+  fill: currentColor !important;
+}
