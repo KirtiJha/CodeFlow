@@ -45,18 +45,27 @@ function discoverRepos(): Array<{
   }
 
   // 2) Check the current active repo (may be a local path not under ~/.codeflow/repos)
+  //    Only include it if it has actual analysis data (nodes > 0)
   const active = getActiveRepo();
   if (active.repoPath && active.dbPath && existsSync(active.dbPath)) {
     const already = repos.find((r) => r.path === active.repoPath);
     if (!already) {
-      repos.push({
-        id: active.repoPath,
-        name: basename(active.repoPath),
-        path: active.repoPath,
-        dbPath: active.dbPath,
-        size: safeFileSize(active.dbPath),
-        isCloned: false,
-      });
+      try {
+        const db = openDatabase({ path: active.dbPath });
+        const row = db.prepare("SELECT COUNT(*) as cnt FROM nodes").get() as { cnt: number } | undefined;
+        if (row && row.cnt > 0) {
+          repos.push({
+            id: active.repoPath,
+            name: basename(active.repoPath),
+            path: active.repoPath,
+            dbPath: active.dbPath,
+            size: safeFileSize(active.dbPath),
+            isCloned: false,
+          });
+        }
+      } catch {
+        // DB may be empty or corrupt — skip
+      }
     }
   }
 

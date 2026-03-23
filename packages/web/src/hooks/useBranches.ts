@@ -4,10 +4,10 @@ import { api } from "@/lib/api-client";
 import { useBranchStore } from "@/stores/branch-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSSE } from "./useSSE";
-import type { BranchConflict } from "@/types/branch";
+import type { BranchInfo, BranchScanEntry, BranchDiffResult, PrePushResult } from "@/types/branch";
 
 export function useBranches() {
-  const { setBranches, setConflicts, setLoading, filterSeverity } =
+  const { setBranches, setScanEntries, setDiffResult, setPrePushResult, setLoading, filterSeverity } =
     useBranchStore();
 
   const { autoScan, scanInterval, minSeverity } = useSettingsStore(
@@ -18,7 +18,8 @@ export function useBranches() {
     setLoading(true);
     try {
       const response = await api.getBranches();
-      setBranches(response.data.branches as never[]);
+      const data = response.data as { branches?: BranchInfo[] };
+      setBranches(data?.branches ?? []);
     } catch (error) {
       toast.error("Failed to fetch branches", {
         description: error instanceof Error ? error.message : "Unknown error",
@@ -28,38 +29,55 @@ export function useBranches() {
     }
   }, [setBranches, setLoading]);
 
-  const fetchConflicts = useCallback(async () => {
+  const fetchScanEntries = useCallback(async () => {
     try {
       const severity = filterSeverity ?? minSeverity;
       const response = await api.getConflicts(severity);
-      setConflicts(response.data.conflicts as BranchConflict[]);
+      const data = response.data as { branchCount?: number; branches?: BranchScanEntry[] };
+      setScanEntries(data?.branches ?? []);
+    } catch {
+      // Silently handle — scan may fail for repos without remotes
+      setScanEntries([]);
+    }
+  }, [setScanEntries, filterSeverity, minSeverity]);
+
+  const diffBranches = useCallback(async (branchA: string, branchB: string) => {
+    try {
+      const response = await api.diffBranches(branchA, branchB);
+      const data = response.data as BranchDiffResult;
+      setDiffResult(data ?? null);
+      return data;
     } catch (error) {
-      toast.error("Failed to fetch conflicts", {
+      toast.error("Failed to diff branches", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+      setDiffResult(null);
+      return null;
     }
-  }, [setConflicts, filterSeverity, minSeverity]);
+  }, [setDiffResult]);
 
   const prePushCheck = useCallback(async (branch: string) => {
     try {
       const response = await api.prePush(branch);
-      return response.data;
+      const data = response.data as PrePushResult;
+      setPrePushResult(data ?? null);
+      return data;
     } catch (error) {
       toast.error("Pre-push check failed", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+      setPrePushResult(null);
       return null;
     }
-  }, []);
+  }, [setPrePushResult]);
 
   // Auto-scan with SSE
   useSSE("branch-conflict", (data) => {
     if (data?.conflict) {
-      const conflict = data.conflict as BranchConflict;
-      toast.warning(`New conflict: ${conflict.branch1} ↔ ${conflict.branch2}`, {
-        description: `${conflict.severity} severity — ${conflict.level} level`,
+      toast.warning(`Branch update detected`, {
+        description: "Refreshing branch data...",
       });
-      fetchConflicts();
+      fetchBranches();
     }
   });
 
@@ -67,10 +85,10 @@ export function useBranches() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   useEffect(() => {
     if (autoScan && scanInterval > 0) {
-      intervalRef.current = setInterval(fetchConflicts, scanInterval);
+      intervalRef.current = setInterval(fetchBranches, scanInterval);
       return () => clearInterval(intervalRef.current);
     }
-  }, [autoScan, scanInterval, fetchConflicts]);
+  }, [autoScan, scanInterval, fetchBranches]);
 
-  return { fetchBranches, fetchConflicts, prePushCheck };
+  return { fetchBranches, fetchScanEntries, diffBranches, prePushCheck };
 }

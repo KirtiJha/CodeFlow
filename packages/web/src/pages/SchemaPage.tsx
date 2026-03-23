@@ -43,6 +43,7 @@ export function SchemaPage() {
   const [modalView, setModalView] = useState<ModalView | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const loadModels = useCallback(async (refresh = false) => {
     setIsLoading(true);
@@ -63,6 +64,7 @@ export function SchemaPage() {
 
   const handleModelSelect = useCallback(async (model: SchemaModel | null) => {
     setSelectedModel(model);
+    setPanelOpen(!!model);
     if (!model) {
       setImpactedFields([]);
       setMigrationSteps([]);
@@ -171,9 +173,9 @@ export function SchemaPage() {
             </Allotment.Pane>
 
             {/* Detail panel */}
+            {panelOpen && selectedModel && (
             <Allotment.Pane minSize={300} preferredSize={400}>
               <div className="flex h-full flex-col border-l border-border-default overflow-auto">
-                {selectedModel ? (
                   <>
                     {/* Model header */}
                     <div className="border-b border-border-default px-4 py-3">
@@ -183,7 +185,7 @@ export function SchemaPage() {
                           {shortName(selectedModel.name)}
                         </div>
                         <button
-                          onClick={() => handleModelSelect(null)}
+                          onClick={() => setPanelOpen(false)}
                           className="rounded-lg p-1 text-text-muted transition hover:bg-bg-elevated hover:text-text-primary"
                           title="Close panel"
                         >
@@ -286,15 +288,9 @@ export function SchemaPage() {
                       )}
                     </div>
                   </>
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-text-muted">
-                    <Database className="h-8 w-8 opacity-30" />
-                    <span className="text-sm">Select a model to view details</span>
-                    <span className="text-xs">Click any node in the graph</span>
-                  </div>
-                )}
               </div>
             </Allotment.Pane>
+            )}
           </Allotment>
         ) : (
           <EmptyState

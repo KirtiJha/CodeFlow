@@ -53,16 +53,16 @@ export const api = {
   getBranches: () =>
     client.get("branches").json<ApiResponse<{ branches: unknown[] }>>(),
 
-  getConflicts: (severity?: string) => {
-    const params = severity ? `?severity=${encodeURIComponent(severity)}` : "";
+  getConflicts: (minSeverity?: string) => {
+    const params = minSeverity ? `?minSeverity=${encodeURIComponent(minSeverity)}` : "";
     return client
       .get(`branches/conflicts${params}`)
-      .json<ApiResponse<{ conflicts: unknown[] }>>();
+      .json<ApiResponse<unknown>>();
   },
 
-  diffBranches: (branch: string, base: string) =>
+  diffBranches: (branchA: string, branchB: string) =>
     client
-      .post("branches/diff", { json: { branch, base } })
+      .post("branches/diff", { json: { branchA, branchB } })
       .json<ApiResponse<unknown>>(),
 
   prePush: (branch: string) =>

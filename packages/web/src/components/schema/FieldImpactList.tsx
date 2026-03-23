@@ -46,7 +46,7 @@ export function FieldImpactList({
 
         return (
           <motion.div
-            key={field.name}
+            key={`${field.name}-${i}`}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.02 }}

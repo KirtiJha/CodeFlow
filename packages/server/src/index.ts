@@ -38,6 +38,37 @@ export async function startServer(config: ServerConfig): Promise<void> {
   const db = openDatabase({ path: repo.dbPath });
   initializeSchema(db);
 
+  // If the startup repo has no analysis data, auto-switch to a cloned repo that does
+  try {
+    const nodeCount = (db.prepare("SELECT COUNT(*) as cnt FROM nodes").get() as { cnt: number }).cnt;
+    if (nodeCount === 0) {
+      const { existsSync, readdirSync, statSync } = await import("node:fs");
+      const { homedir } = await import("node:os");
+      const cloneBase = resolve(homedir(), ".codeflow", "repos");
+      if (existsSync(cloneBase)) {
+        outer: for (const org of readdirSync(cloneBase)) {
+          const orgDir = resolve(cloneBase, org);
+          if (!statSync(orgDir).isDirectory()) continue;
+          for (const repoName of readdirSync(orgDir)) {
+            const repoDir = resolve(orgDir, repoName);
+            if (!statSync(repoDir).isDirectory()) continue;
+            const candidateDb = resolve(repoDir, ".codeflow", "codeflow.db");
+            if (existsSync(candidateDb)) {
+              const cDb = openDatabase({ path: candidateDb });
+              const cnt = (cDb.prepare("SELECT COUNT(*) as cnt FROM nodes").get() as { cnt: number }).cnt;
+              if (cnt > 0) {
+                setActiveRepo(repoDir);
+                break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Best-effort — keep the original active repo
+  }
+
   // Context middleware — inject repo config into all routes
   app.use("*", async (c, next) => {
     const repo = getActiveRepo();

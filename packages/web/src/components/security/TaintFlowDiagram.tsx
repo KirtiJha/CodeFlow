@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -25,6 +25,25 @@ export function TaintFlowDiagram({
   onFlowSelect,
   className = "",
 }: TaintFlowDiagramProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasSize, setHasSize] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setHasSize(rect.width > 0 && rect.height > 0);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, []);
+
   const { nodes, edges } = useMemo(() => {
     const nodeMap = new Map<string, Node>();
     const edgeList: Edge[] = [];
@@ -117,7 +136,12 @@ export function TaintFlowDiagram({
   }
 
   return (
-    <div className={`h-full w-full ${className}`}>
+    <div
+      ref={containerRef}
+      className={`h-full w-full ${className}`}
+      style={{ minHeight: 280 }}
+    >
+      {hasSize && (
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -145,6 +169,7 @@ export function TaintFlowDiagram({
           maskColor="rgba(10, 10, 15, 0.8)"
         />
       </ReactFlow>
+      )}
     </div>
   );
 }

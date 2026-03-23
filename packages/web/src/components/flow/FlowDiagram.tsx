@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -36,6 +36,25 @@ export function FlowDiagram({
   onNodeClick,
   className = "",
 }: FlowDiagramProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasSize, setHasSize] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setHasSize(rect.width > 0 && rect.height > 0);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, []);
+
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!trace) return { initialNodes: [], initialEdges: [] };
 
@@ -90,7 +109,12 @@ export function FlowDiagram({
   }
 
   return (
-    <div className={`h-full w-full ${className}`}>
+    <div
+      ref={containerRef}
+      className={`${className}`}
+      style={{ width: "100%", height: "100%", minHeight: 300 }}
+    >
+      {hasSize && (
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -107,11 +131,12 @@ export function FlowDiagram({
         <Background color="#1a1a2e" gap={20} size={1} />
         <Controls className="[&>button]:border-border-default [&>button]:bg-bg-surface [&>button]:text-text-muted [&>button]:hover:bg-bg-elevated [&>button]:hover:text-text-primary" />
         <MiniMap
-          nodeColor={(n) => (n.data?.color as string) ?? '#6b7280'}
+          nodeColor={(n) => (n.data?.color as string) ?? "#6b7280"}
           maskColor="rgba(10, 10, 15, 0.8)"
           className="border border-border-default !bg-bg-surface"
         />
       </ReactFlow>
+      )}
     </div>
   );
 }

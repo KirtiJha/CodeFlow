@@ -1,11 +1,43 @@
 export interface BranchInfo {
   name: string;
-  current: boolean;
-  lastCommit: string;
-  lastCommitDate: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  commitHash: string;
+  lastCommitDate?: string | null;
+  lastCommitMessage?: string | null;
+  author?: string | null;
+  authorEmail?: string | null;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface BranchScanEntry {
+  branch: string;
   author: string;
-  ahead: number;
-  behind: number;
+  lastCommit: string;
+  filesChanged: number;
+}
+
+export interface BranchDiffResult {
+  branchA: string;
+  branchB: string;
+  filesChanged: number;
+  diffs: BranchDiffFile[];
+}
+
+export interface BranchDiffFile {
+  file: string;
+  status: string;
+  linesAdded: number;
+  linesRemoved: number;
+}
+
+export interface PrePushResult {
+  safe: boolean;
+  branch?: string;
+  filesChanged?: number;
+  recommendation?: string;
+  message?: string;
 }
 
 export interface BranchConflict {

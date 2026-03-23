@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, memo } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef, memo } from "react";
 import {
   ReactFlow,
   Background,
@@ -60,7 +60,6 @@ function dirOf(file: string | undefined): string {
 }
 
 /* ── Node data shape ───────────────────────────────────────────── */
-
 interface ModelCardData {
   label: string;
   short: string;
@@ -238,6 +237,25 @@ export function SchemaGraph({
   onModelSelect,
   className = "",
 }: SchemaGraphProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasSize, setHasSize] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setHasSize(rect.width > 0 && rect.height > 0);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, []);
+
   const [hovered, setHovered] = useState<string | null>(null);
 
   /* Pre-compute adjacency and connection counts */
@@ -436,7 +454,7 @@ export function SchemaGraph({
     : 0;
 
   return (
-    <div className={`relative h-full w-full ${className}`}>
+    <div ref={containerRef} className={`relative h-full w-full ${className}`}>
       {/* ── Legend bar ── */}
       <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-border-default bg-bg-surface/90 backdrop-blur-sm px-3 py-1.5 shadow-lg shadow-black/30">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
@@ -461,6 +479,7 @@ export function SchemaGraph({
         </span>
       </div>
 
+      {hasSize && (
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -497,6 +516,7 @@ export function SchemaGraph({
           zoomable
         />
       </ReactFlow>
+      )}
 
       {/* Dark-theme overrides for ReactFlow controls & minimap */}
       <style>{`
