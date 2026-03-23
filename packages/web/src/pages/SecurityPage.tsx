@@ -282,6 +282,8 @@ export function SecurityPage() {
                 flows={filteredFlows}
                 selectedFlowId={selectedFlow?.id}
                 onFlowSelect={selectFlow}
+                score={score?.score}
+                grade={score?.grade}
               />
             </Allotment.Pane>
             <Allotment.Pane minSize={300} preferredSize={360}>
