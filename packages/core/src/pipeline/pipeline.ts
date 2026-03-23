@@ -474,7 +474,11 @@ export class Pipeline {
         const targets = symbolTable.lookupByName(name);
         const target = targets[0];
         if (target) {
+          const oldTargetId = edge.targetId;
           edge.targetId = target.id;
+          if (edge.targetId !== oldTargetId) {
+            graph.reindexEdge(edge.id, edge.sourceId, oldTargetId);
+          }
         }
       }
     }
@@ -496,8 +500,11 @@ export class Pipeline {
       const child = childArr[0];
       const parent = parentArr[0];
       if (child && parent) {
+        const oldSourceId = edge.sourceId;
+        const oldTargetId = edge.targetId;
         edge.sourceId = child.id;
         edge.targetId = parent.id;
+        graph.reindexEdge(edge.id, oldSourceId, oldTargetId);
       }
     }
 
@@ -612,29 +619,96 @@ export class Pipeline {
     );
 
     let resolved = 0;
+    const repoRoot = resolve(this.config.repoPath);
     for (const edge of callEdges) {
       const call = edge.metadata!.call as {
         callerName?: string;
-        calleeName: string;
+        calleeName?: string;
+        callee?: string;
         receiverName?: string;
         filePath: string;
+        line?: number;
+        location?: { start: { line: number; column: number }; end: { line: number; column: number } };
       };
 
-      // Resolve caller
+      const oldSourceId = edge.sourceId;
+      const oldTargetId = edge.targetId;
+      const callLine = call.line ?? call.location?.start.line;
+
+      // Normalize absolute filePath to relative (nodes use relative paths)
+      let callFilePath = call.filePath;
+      if (callFilePath.startsWith(repoRoot)) {
+        callFilePath = callFilePath.slice(repoRoot.length + 1);
+      }
+
+      // Resolve caller by name
       if (call.callerName) {
-        const caller = symbolTable.lookupInFile(call.callerName, call.filePath);
+        const caller = symbolTable.lookupInFile(call.callerName, callFilePath);
         if (caller) edge.sourceId = caller.id;
       }
 
+      // Fallback: find enclosing function by line number
+      if (!edge.sourceId && callLine && callFilePath) {
+        const fileNodes = graph.getNodesByFile(callFilePath);
+        if (fileNodes.length === 0) {
+          // No nodes indexed for this file
+        } else {
+          let best: GraphNode | null = null;
+          let bestSpan = Infinity;
+          for (const fn of fileNodes) {
+            if (
+              fn.kind !== "function" && fn.kind !== "method" &&
+              fn.kind !== "class" && fn.kind !== "module"
+            ) continue;
+            const start = fn.startLine ?? fn.location?.start.line;
+            const end = fn.endLine ?? fn.location?.end.line;
+            if (start != null && end != null && callLine >= start && callLine <= end) {
+              const span = end - start;
+              if (span < bestSpan) {
+                bestSpan = span;
+                best = fn;
+              }
+            }
+          }
+          if (best) {
+            edge.sourceId = best.id;
+          } else {
+            // Call is at top-level, not inside any function
+          }
+        }
+      } else if (!edge.sourceId) {
+        // No call line info available
+      }
+
       // Resolve callee
-      const callees = symbolTable.lookupByName(call.calleeName ?? "");
-      const callee = callees[0];
-      if (callee) {
-        edge.targetId = callee.id;
-        edge.confidence = 0.9;
+      const calleeName = call.calleeName ?? call.callee ?? "";
+      if (!calleeName) {
+        // No callee name in call metadata
+      } else {
+        const callees = symbolTable.lookupByName(calleeName);
+        const callee = callees[0];
+        if (callee) {
+          edge.targetId = callee.id;
+          edge.confidence = 0.9;
+        } else {
+          // Callee not found in symbol table (likely external/library)
+        }
+      }
+
+      if (edge.sourceId && edge.targetId && edge.sourceId !== edge.targetId) {
         resolved++;
       }
+
+      // Re-index the edge if source or target changed
+      if (edge.sourceId !== oldSourceId || edge.targetId !== oldTargetId) {
+        graph.reindexEdge(edge.id, oldSourceId, oldTargetId);
+      }
     }
+
+    log.info(
+      { total: callEdges.length, resolved },
+      "Call graph resolution stats",
+    );
 
     stats.edges += resolved;
     progress.updatePhase(100, `Resolved ${resolved}/${callEdges.length} calls`);
@@ -995,9 +1069,22 @@ export class Pipeline {
     );
 
     const nodes = [...graph.nodes.values()];
-    const edges = [...graph.edges.values()].filter(
-      (e) => e.sourceId && e.targetId,
-    );
+    const allEdges = [...graph.edges.values()];
+    const edges = allEdges.filter((e) => e.sourceId && e.targetId);
+
+    const unresolved = allEdges.length - edges.length;
+    if (unresolved > 0) {
+      const byKind: Record<string, number> = {};
+      for (const e of allEdges) {
+        if (!e.sourceId || !e.targetId) {
+          byKind[e.kind] = (byKind[e.kind] ?? 0) + 1;
+        }
+      }
+      log.info(
+        { unresolved, byKind, total: allEdges.length, persisted: edges.length },
+        "Edges filtered out (unresolved source/target)",
+      );
+    }
 
     // Wrap in a single transaction — much faster and avoids blocking
     // the event loop for thousands of individual auto-commits

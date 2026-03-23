@@ -110,6 +110,34 @@ export class InMemoryGraph implements KnowledgeGraph {
     this.edges.delete(id);
   }
 
+  /**
+   * Re-index an edge after its sourceId or targetId has been mutated.
+   * Call this whenever you update edge.sourceId / edge.targetId outside of addEdge.
+   */
+  reindexEdge(edgeId: string, oldSourceId: string, oldTargetId: string): void {
+    const edge = this.edges.get(edgeId);
+    if (!edge) return;
+
+    // Remove from old indices
+    this.outgoing.get(oldSourceId)?.delete(edgeId);
+    this.incoming.get(oldTargetId)?.delete(edgeId);
+
+    // Add to new indices
+    let out = this.outgoing.get(edge.sourceId);
+    if (!out) {
+      out = new Set();
+      this.outgoing.set(edge.sourceId, out);
+    }
+    out.add(edgeId);
+
+    let inc = this.incoming.get(edge.targetId);
+    if (!inc) {
+      inc = new Set();
+      this.incoming.set(edge.targetId, inc);
+    }
+    inc.add(edgeId);
+  }
+
   getOutgoingEdges(nodeId: string, kind?: EdgeKind): GraphEdge[] {
     const edgeIds = this.outgoing.get(nodeId);
     if (!edgeIds) return [];

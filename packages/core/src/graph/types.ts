@@ -120,6 +120,7 @@ export interface KnowledgeGraph {
   getEdge(id: string): GraphEdge | undefined;
   removeNode(id: string): void;
   removeEdge(id: string): void;
+  reindexEdge(edgeId: string, oldSourceId: string, oldTargetId: string): void;
 
   getOutgoingEdges(nodeId: string, kind?: EdgeKind): GraphEdge[];
   getIncomingEdges(nodeId: string, kind?: EdgeKind): GraphEdge[];
