@@ -26,6 +26,7 @@ export interface SecurityReport {
   byCategory: Record<string, number>;
   flows: TaintFlow[];
   scannedAt: string;
+  scanners?: string[];
 }
 
 export interface SecurityScore {
