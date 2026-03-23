@@ -97,6 +97,18 @@ schemaRoutes.get("/schema/models", async (c) => {
   const schemaStore = new SchemaStore(db);
   const forceRefresh = c.req.query("refresh") === "true";
 
+  // Look up the actual repo ID from the repos table (pipeline uses UUIDs)
+  const repoRow = db.prepare("SELECT id FROM repos LIMIT 1").get() as { id: string } | undefined;
+  const repoId = repoRow?.id ?? "default";
+
+  // Ensure a repos row exists so FK constraints on schema_models are satisfied
+  if (!repoRow) {
+    const repoPath = c.get("repoPath") ?? dbPath;
+    db.prepare(
+      "INSERT OR IGNORE INTO repos (id, name, path, branch) VALUES (?, ?, ?, ?)"
+    ).run(repoId, "default", repoPath, "main");
+  }
+
   let models: ReturnType<SchemaStore["getAllModels"]> = [];
   try {
     models = forceRefresh ? [] : schemaStore.getAllModels();
@@ -107,7 +119,7 @@ schemaRoutes.get("/schema/models", async (c) => {
   // Re-extract if no models or forced refresh (clears stale data first)
   if (models.length === 0) {
     if (forceRefresh) {
-      try { schemaStore.clearRepo("default"); } catch { /* table may not exist */ }
+      try { schemaStore.clearRepo(repoId); } catch { /* table may not exist */ }
     }
     const nodeStore = new NodeStore(db);
     const edgeStore = new EdgeStore(db);
@@ -117,15 +129,19 @@ schemaRoutes.get("/schema/models", async (c) => {
     for (const e of edgeStore.getAll()) graph.addEdge(e);
 
     const extractor = new SchemaExtractor();
-    models = extractor.extract(graph, "default");
+    models = extractor.extract(graph, repoId);
 
     if (models.length > 0) {
-      schemaStore.insertModelBatch(models);
+      try {
+        schemaStore.insertModelBatch(models);
 
-      const linker = new SchemaLinker();
-      const refs = linker.linkFields(models, graph, "default");
-      if (refs.length > 0) {
-        schemaStore.insertRefBatch(refs);
+        const linker = new SchemaLinker();
+        const refs = linker.linkFields(models, graph, repoId);
+        if (refs.length > 0) {
+          schemaStore.insertRefBatch(refs);
+        }
+      } catch {
+        // Cache write failed — still return extracted models below
       }
     }
   }
@@ -206,7 +222,9 @@ schemaRoutes.post("/schema/impact", async (c) => {
   }
 
   const linker = new SchemaLinker();
-  const refs = linker.linkFields([targetModel], graph, "default");
+  const repoRow = db.prepare("SELECT id FROM repos LIMIT 1").get() as { id: string } | undefined;
+  const repoId = repoRow?.id ?? "default";
+  const refs = linker.linkFields([targetModel], graph, repoId);
 
   // Group references by field
   const refsByField = new Map<string, typeof refs>();

@@ -32,17 +32,20 @@ export function TaintFlowDiagram({
     const el = containerRef.current;
     if (!el) return;
 
-    const update = () => {
+    const check = () => {
       const rect = el.getBoundingClientRect();
-      setHasSize(rect.width > 0 && rect.height > 0);
+      if (rect.width > 0 && rect.height > 0) {
+        setHasSize(true);
+        observer.disconnect();
+      }
     };
 
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
+    const observer = new ResizeObserver(check);
+    check();
+    if (!hasSize) observer.observe(el);
 
     return () => observer.disconnect();
-  }, []);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const { nodes, edges } = useMemo(() => {
     const nodeMap = new Map<string, Node>();
