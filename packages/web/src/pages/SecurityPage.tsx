@@ -284,18 +284,32 @@ export function SecurityPage() {
                 onFlowSelect={selectFlow}
               />
             </Allotment.Pane>
-            <Allotment.Pane minSize={280} preferredSize={340}>
+            <Allotment.Pane minSize={300} preferredSize={360}>
               <div className="flex h-full flex-col border-l border-border-default overflow-auto">
                 {score && <ScoreHeader score={score} />}
-                <div className="flex-1 overflow-auto p-3 space-y-2">
-                  {filteredFlows.map((flow) => (
-                    <FindingCard
-                      key={flow.id}
-                      flow={flow}
-                      selected={selectedFlow?.id === flow.id}
-                      onClick={() => selectFlow(selectedFlow?.id === flow.id ? null : flow)}
-                    />
-                  ))}
+                <div className="flex-1 overflow-auto">
+                  {selectedFlow ? (
+                    <GraphDetailPanel flow={selectedFlow} onClose={() => selectFlow(null)} />
+                  ) : (
+                    <div className="p-4 space-y-2">
+                      <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                        Select a node to view details
+                      </div>
+                      {filteredFlows.slice(0, 30).map((flow) => (
+                        <FindingCard
+                          key={flow.id}
+                          flow={flow}
+                          selected={false}
+                          onClick={() => selectFlow(flow)}
+                        />
+                      ))}
+                      {filteredFlows.length > 30 && (
+                        <div className="text-center text-[10px] text-text-muted py-2">
+                          + {filteredFlows.length - 30} more findings
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </Allotment.Pane>
@@ -524,8 +538,9 @@ function CategoryGroup({
 
 function FindingRow({ flow, selected, onClick }: { flow: TaintFlow; selected: boolean; onClick: () => void }) {
   const conf = sevConf(flow.severity);
-  const source = flow.path?.[0] ?? flow.source;
-  const sink = flow.path?.[flow.path.length - 1] ?? flow.sink;
+  const source = flow.source;
+  const sink = flow.sink;
+  const isSameLocation = source?.file === sink?.file && source?.line === sink?.line;
 
   return (
     <button
@@ -545,13 +560,17 @@ function FindingRow({ flow, selected, onClick }: { flow: TaintFlow; selected: bo
         <div className="mt-1 flex items-center gap-2 text-[10px] text-text-muted">
           <span className="flex items-center gap-1 truncate">
             <FileCode className="h-3 w-3 flex-shrink-0" />
-            {source?.file}:{source?.line}
+            {sink?.file}:{sink?.line}
           </span>
-          {sink && sink !== source && (
+          {!isSameLocation && source?.name && (
             <>
-              <ArrowRight className="h-3 w-3 flex-shrink-0 text-text-muted/50" />
-              <span className="truncate">
-                {sink?.file}:{sink?.line}
+              <span className="text-text-muted/40">|</span>
+              <span className="truncate text-blue-400/70">
+                {source.name}
+              </span>
+              <ArrowRight className="h-2.5 w-2.5 flex-shrink-0 text-text-muted/40" />
+              <span className="truncate text-amber-400/70">
+                {sink?.symbol?.slice(0, 40)}
               </span>
             </>
           )}
@@ -571,8 +590,6 @@ function FindingRow({ flow, selected, onClick }: { flow: TaintFlow; selected: bo
 
 function FindingCard({ flow, selected, onClick }: { flow: TaintFlow; selected: boolean; onClick: () => void }) {
   const conf = sevConf(flow.severity);
-  const source = flow.path?.[0] ?? flow.source;
-  const sink = flow.path?.[flow.path.length - 1] ?? flow.sink;
 
   return (
     <motion.button
@@ -587,17 +604,18 @@ function FindingCard({ flow, selected, onClick }: { flow: TaintFlow; selected: b
     >
       <div className="flex items-start justify-between gap-2">
         <span className="text-[11px] font-medium text-text-primary line-clamp-2">
-          {catLabel(flow.category)}
+          {flow.description || catLabel(flow.category)}
         </span>
         <span
-          className="flex-shrink-0 h-1.5 w-1.5 rounded-full mt-1"
-          style={{ background: conf.color }}
-        />
+          className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+          style={{ background: conf.bg, color: conf.color }}
+        >
+          {conf.label}
+        </span>
       </div>
-      <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-text-muted">
-        <span className="font-mono truncate" style={{ color: "#ef4444" }}>{source?.symbol}</span>
-        <ArrowRight className="h-2.5 w-2.5 flex-shrink-0" />
-        <span className="font-mono truncate" style={{ color: "#f59e0b" }}>{sink?.symbol}</span>
+      <div className="mt-1.5 text-[10px] text-text-muted flex items-center gap-1">
+        <FileCode className="h-3 w-3 flex-shrink-0" />
+        <span className="truncate">{flow.sink?.file}:{flow.sink?.line}</span>
       </div>
     </motion.button>
   );
@@ -607,8 +625,10 @@ function FindingCard({ flow, selected, onClick }: { flow: TaintFlow; selected: b
 
 function FindingDrawer({ flow, onClose }: { flow: TaintFlow; onClose: () => void }) {
   const conf = sevConf(flow.severity);
-  const source = flow.path?.[0] ?? flow.source;
-  const sink = flow.path?.[flow.path.length - 1] ?? flow.sink;
+  const source = flow.source;
+  const sink = flow.sink;
+  const isSameLocation = source?.file === sink?.file && source?.line === sink?.line;
+  const hasMultiStepPath = flow.path.length > 1;
 
   return (
     <motion.div
@@ -638,71 +658,200 @@ function FindingDrawer({ flow, onClose }: { flow: TaintFlow; onClose: () => void
       </div>
 
       <div className="overflow-auto p-4" style={{ maxHeight: "calc(45vh - 44px)" }}>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-6">
           {/* Left: details */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             {flow.description && (
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Description</div>
-                <p className="text-xs text-text-secondary">{flow.description}</p>
+                <p className="text-xs text-text-secondary leading-relaxed">{flow.description}</p>
               </div>
             )}
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Fix</div>
-              <p className="text-xs text-text-secondary">{flow.fix}</p>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Recommendation</div>
+              <p className="text-xs text-text-secondary leading-relaxed">{flow.fix}</p>
             </div>
-            <div className="flex gap-4">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Source</div>
-                <div className="text-xs">
-                  <span className="font-mono text-red-400">{source?.symbol}</span>
-                  <div className="text-[10px] text-text-muted mt-0.5">{source?.file}:{source?.line}</div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Location</div>
+              <div className="rounded-lg border border-border-default bg-bg-elevated/30 p-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <FileCode className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
+                  <span className="font-mono text-accent-blue">{sink?.file}</span>
+                  <span className="text-text-muted">line {sink?.line}</span>
                 </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Sink</div>
-                <div className="text-xs">
-                  <span className="font-mono text-amber-400">{sink?.symbol}</span>
-                  <div className="text-[10px] text-text-muted mt-0.5">{sink?.file}:{sink?.line}</div>
-                </div>
+                {sink?.symbol && (
+                  <div className="mt-2 rounded-md bg-bg-elevated p-2 font-mono text-[11px] text-text-secondary overflow-x-auto">
+                    {sink.symbol}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Right: flow path */}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
-              Flow Path ({flow.path.length} step{flow.path.length !== 1 ? "s" : ""})
-            </div>
-            <div className="space-y-1">
-              {flow.path.map((step, i) => {
-                const isFirst = i === 0;
-                const isLast = i === flow.path.length - 1;
-                return (
-                  <div
-                    key={`${step.file}-${step.line}-${i}`}
-                    className="flex items-start gap-2 text-[11px]"
-                  >
-                    <div className="flex flex-col items-center pt-1">
-                      <div
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          background: isFirst ? "#ef4444" : isLast ? "#f59e0b" : "#3b82f6",
-                        }}
-                      />
-                      {!isLast && <div className="w-px h-3 bg-border-default" />}
-                    </div>
-                    <div className="min-w-0">
-                      <span className="font-mono text-text-primary truncate block">{step.symbol}</span>
-                      <span className="text-[10px] text-text-muted">{step.file}:{step.line}</span>
-                    </div>
+          {/* Right: data flow info */}
+          <div className="space-y-4">
+            {hasMultiStepPath ? (
+              <>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+                    Data Flow ({flow.path.length} step{flow.path.length !== 1 ? "s" : ""})
                   </div>
-                );
-              })}
-            </div>
+                  <div className="space-y-0">
+                    {flow.path.map((step, i) => {
+                      const isFirst = i === 0;
+                      const isLast = i === flow.path.length - 1;
+                      return (
+                        <div
+                          key={`${step.file}-${step.line}-${i}`}
+                          className="flex items-stretch gap-3"
+                        >
+                          <div className="flex flex-col items-center w-4">
+                            <div
+                              className="h-3 w-3 rounded-full flex-shrink-0 mt-1"
+                              style={{
+                                background: isFirst ? "#3b82f6" : isLast ? sevConf(flow.severity).color : "#555577",
+                                border: `2px solid ${isFirst ? "#3b82f6" : isLast ? sevConf(flow.severity).color : "#555577"}`,
+                              }}
+                            />
+                            {!isLast && <div className="w-px flex-1 bg-border-default min-h-[12px]" />}
+                          </div>
+                          <div className="pb-3 min-w-0 flex-1">
+                            <div className="text-[10px] font-medium" style={{ color: isFirst ? "#3b82f6" : isLast ? sevConf(flow.severity).color : "#c0c0d8" }}>
+                              {isFirst ? "Source" : isLast ? "Sink" : `Step ${i}`} — {step.kind}
+                            </div>
+                            <div className="text-[11px] font-mono text-text-primary truncate">{step.symbol || step.name}</div>
+                            <div className="text-[10px] text-text-muted">{step.file}:{step.line}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : !isSameLocation ? (
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Data Source</div>
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5">
+                    <div className="text-xs font-medium text-blue-400">{source?.name || source?.symbol}</div>
+                    <div className="text-[10px] text-text-muted mt-0.5">{source?.file}:{source?.line}</div>
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <ArrowRight className="h-4 w-4 text-text-muted/40" style={{ transform: "rotate(90deg)" }} />
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Dangerous Sink</div>
+                  <div className="rounded-lg border p-2.5" style={{ borderColor: conf.color + "30", background: conf.bg }}>
+                    <div className="text-xs font-mono" style={{ color: conf.color }}>{sink?.symbol?.slice(0, 60)}</div>
+                    <div className="text-[10px] text-text-muted mt-0.5">{sink?.file}:{sink?.line}</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">Code Pattern</div>
+                <div className="rounded-lg border border-border-default bg-bg-elevated/30 p-3">
+                  <div className="font-mono text-[11px] text-text-secondary overflow-x-auto">
+                    {sink?.symbol}
+                  </div>
+                  <div className="mt-2 text-[10px] text-text-muted">
+                    {sink?.file}:{sink?.line}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+/* ── Graph Detail Panel (replaces the list in graph side panel) ── */
+
+function GraphDetailPanel({ flow, onClose }: { flow: TaintFlow; onClose: () => void }) {
+  const conf = sevConf(flow.severity);
+  const source = flow.source;
+  const sink = flow.sink;
+  const isSameLocation = source?.file === sink?.file && source?.line === sink?.line;
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <conf.icon className="h-4 w-4 flex-shrink-0" style={{ color: conf.color }} />
+          <span className="text-sm font-semibold text-text-primary truncate">
+            {catLabel(flow.category)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+            style={{ background: conf.bg, color: conf.color }}
+          >
+            {conf.label}
+          </span>
+          <button onClick={onClose} className="rounded p-0.5 text-text-muted hover:bg-bg-elevated hover:text-text-primary">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Description */}
+      {flow.description && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Description</div>
+          <p className="text-xs text-text-secondary leading-relaxed">{flow.description}</p>
+        </div>
+      )}
+
+      {/* Location */}
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Location</div>
+        <div className="rounded-lg border border-border-default bg-bg-elevated/30 p-2.5">
+          <div className="flex items-center gap-2 text-[11px]">
+            <FileCode className="h-3 w-3 text-text-muted flex-shrink-0" />
+            <span className="font-mono text-accent-blue truncate">{sink?.file}</span>
+            <span className="text-text-muted flex-shrink-0">:{sink?.line}</span>
+          </div>
+          {sink?.symbol && (
+            <div className="mt-2 rounded bg-bg-elevated p-2 font-mono text-[10px] text-text-secondary overflow-x-auto whitespace-nowrap">
+              {sink.symbol}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Data flow */}
+      {!isSameLocation && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">Data Flow</div>
+          <div className="space-y-2">
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-blue-400/60 mb-0.5">Source</div>
+              <div className="text-xs font-medium text-blue-400">{source?.name || source?.symbol}</div>
+            </div>
+            <div className="flex justify-center">
+              <ArrowRight className="h-3.5 w-3.5 text-text-muted/30" style={{ transform: "rotate(90deg)" }} />
+            </div>
+            <div className="rounded-lg border p-2.5" style={{ borderColor: conf.color + "30", background: conf.bg }}>
+              <div className="text-[9px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: conf.color + "80" }}>Sink</div>
+              <div className="text-xs font-mono truncate" style={{ color: conf.color }}>{sink?.symbol?.slice(0, 50)}</div>
+              <div className="text-[10px] text-text-muted mt-0.5">{sink?.file}:{sink?.line}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fix */}
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">Recommendation</div>
+        <div className="rounded-lg border border-green-500/15 bg-green-500/5 p-2.5">
+          <p className="text-xs text-green-400/80 leading-relaxed">{flow.fix}</p>
+        </div>
+      </div>
+    </div>
   );
 }
