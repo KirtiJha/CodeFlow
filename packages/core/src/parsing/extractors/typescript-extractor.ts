@@ -80,9 +80,9 @@ export class TypeScriptExtractor extends BaseExtractor {
           isExported: this.isExported(node),
         });
 
-        // Methods within the class
         const body = node.childForFieldName("body");
         if (body) {
+          // Methods within the class
           for (const method of this.collectByType(body, "method_definition")) {
             const methodName = method.childForFieldName("name");
             const params = method.childForFieldName("parameters");
@@ -94,10 +94,33 @@ export class TypeScriptExtractor extends BaseExtractor {
                 filePath,
                 location: this.nodeLocation(method),
                 owner: this.nodeText(name),
+                parentName: this.nodeText(name),
                 signature: this.buildSignature(methodName, params, returnType),
                 paramCount: this.countParams(params),
                 returnType:
                   this.nodeText(returnType)?.replace(/^:\s*/, "") || undefined,
+              });
+            }
+          }
+
+          // Properties within the class
+          for (const prop of this.collectByType(
+            body,
+            "public_field_definition",
+          )) {
+            const propName = prop.childForFieldName("name");
+            const typeAnnotation = prop.childForFieldName("type");
+            if (propName) {
+              symbols.push({
+                name: this.nodeText(propName),
+                kind: "property" as NodeKind,
+                filePath,
+                location: this.nodeLocation(prop),
+                owner: this.nodeText(name),
+                parentName: this.nodeText(name),
+                typeAnnotation:
+                  this.nodeText(typeAnnotation)?.replace(/^:\s*/, "") ||
+                  undefined,
               });
             }
           }
@@ -116,6 +139,49 @@ export class TypeScriptExtractor extends BaseExtractor {
           location: this.nodeLocation(node),
           isExported: this.isExported(node),
         });
+
+        // Interface property signatures (fields)
+        const body = node.childForFieldName("body");
+        if (body) {
+          for (const prop of this.collectByType(body, "property_signature")) {
+            const propName = prop.childForFieldName("name");
+            const typeAnnotation = prop.childForFieldName("type");
+            if (propName) {
+              symbols.push({
+                name: this.nodeText(propName),
+                kind: "property" as NodeKind,
+                filePath,
+                location: this.nodeLocation(prop),
+                owner: this.nodeText(name),
+                parentName: this.nodeText(name),
+                typeAnnotation:
+                  this.nodeText(typeAnnotation)?.replace(/^:\s*/, "") ||
+                  undefined,
+              });
+            }
+          }
+
+          // Interface method signatures
+          for (const method of this.collectByType(body, "method_signature")) {
+            const methodName = method.childForFieldName("name");
+            const params = method.childForFieldName("parameters");
+            const returnType = method.childForFieldName("return_type");
+            if (methodName) {
+              symbols.push({
+                name: this.nodeText(methodName),
+                kind: "method" as NodeKind,
+                filePath,
+                location: this.nodeLocation(method),
+                owner: this.nodeText(name),
+                parentName: this.nodeText(name),
+                signature: this.buildSignature(methodName, params, returnType),
+                paramCount: this.countParams(params),
+                returnType:
+                  this.nodeText(returnType)?.replace(/^:\s*/, "") || undefined,
+              });
+            }
+          }
+        }
       }
     }
 
@@ -130,6 +196,42 @@ export class TypeScriptExtractor extends BaseExtractor {
           location: this.nodeLocation(node),
           isExported: this.isExported(node),
         });
+      }
+    }
+
+    // Enums
+    for (const node of this.collectByType(root, "enum_declaration")) {
+      const name = node.childForFieldName("name");
+      if (name) {
+        symbols.push({
+          name: this.nodeText(name),
+          kind: "enum" as NodeKind,
+          filePath,
+          location: this.nodeLocation(node),
+          isExported: this.isExported(node),
+        });
+
+        // Enum members
+        const body = node.childForFieldName("body");
+        if (body) {
+          for (const member of this.collectByType(body, "enum_assignment")) {
+            const memberName = member.childForFieldName("name");
+            const memberValue = member.childForFieldName("value");
+            if (memberName) {
+              symbols.push({
+                name: this.nodeText(memberName),
+                kind: "property" as NodeKind,
+                filePath,
+                location: this.nodeLocation(member),
+                owner: this.nodeText(name),
+                parentName: this.nodeText(name),
+                typeAnnotation: memberValue
+                  ? this.nodeText(memberValue)
+                  : undefined,
+              });
+            }
+          }
+        }
       }
     }
 

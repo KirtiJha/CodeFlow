@@ -268,4 +268,5 @@ export interface PipelineStats {
   schemaModels: number;
   taintFlows: number;
   durationMs: number;
+  languages: string[];
 }

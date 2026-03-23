@@ -13,5 +13,6 @@ export { EdgeStore } from "./edge-store.js";
 export { DFGStore } from "./dfg-store.js";
 export { SummaryStore } from "./summary-store.js";
 export { BranchStore } from "./branch-store.js";
+export { SchemaStore } from "./schema-store.js";
 export { QueryEngine } from "./query-engine.js";
 export type { RepoRecord } from "./query-engine.js";

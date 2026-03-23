@@ -40,6 +40,7 @@
     "./storage/node-store": {
       "import": "./dist/storage/node-store.js"
     },
+
     "./taint": {
       "import": "./dist/taint/index.js"
     },

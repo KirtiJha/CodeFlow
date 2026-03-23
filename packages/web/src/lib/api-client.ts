@@ -210,8 +210,8 @@ export const api = {
     client.get("security/report").json<ApiResponse<unknown>>(),
 
   // Schema
-  getSchemaModels: () =>
-    client.get("schema/models").json<ApiResponse<unknown>>(),
+  getSchemaModels: (refresh = false) =>
+    client.get(`schema/models${refresh ? "?refresh=true" : ""}`).json<ApiResponse<unknown>>(),
 
   schemaImpact: (model: string, field: string, action: string) =>
     client
@@ -259,6 +259,41 @@ export const api = {
     client
       .post("impact", { json: { nodeId, depth } })
       .json<ApiResponse<unknown>>(),
+
+  // Repos
+  listRepos: () =>
+    client.get("repos").json<
+      ApiResponse<{
+        repos: Array<{
+          id: string;
+          name: string;
+          path: string;
+          dbSize: number;
+          isCloned: boolean;
+          isActive: boolean;
+          stats: {
+            nodes: number;
+            edges: number;
+            files: number;
+            functions: number;
+            classes: number;
+            languages: string[];
+            analyzedAt: string | null;
+            duration: number | null;
+          } | null;
+        }>;
+      }>
+    >(),
+
+  switchRepo: (repoPath: string) =>
+    client
+      .post("repos/switch", { json: { repoPath } })
+      .json<ApiResponse<{ repoPath: string; dbPath: string }>>(),
+
+  deleteRepo: (id: string) =>
+    client
+      .delete(`repos/${encodeURIComponent(id)}`)
+      .json<ApiResponse<{ deleted: string }>>(),
 };
 
 type TraceApiResponse = ApiResponse<{

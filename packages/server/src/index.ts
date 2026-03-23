@@ -15,7 +15,9 @@ import { riskRoutes } from "./routes/risk.js";
 import { searchRoutes } from "./routes/search.js";
 import { eventsRoute } from "./routes/events.js";
 import { cloneRoutes } from "./routes/clone.js";
+import { reposRoutes } from "./routes/repos.js";
 import { setActiveRepo, getActiveRepo } from "./state.js";
+import { openDatabase, initializeSchema } from "@codeflow/core/storage";
 
 export interface ServerConfig {
   port?: number;
@@ -30,6 +32,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   // Initialize with the startup repoPath
   setActiveRepo(config.repoPath);
+
+  // Ensure DB tables exist (safe for fresh/empty databases)
+  const repo = getActiveRepo();
+  const db = openDatabase({ path: repo.dbPath });
+  initializeSchema(db);
 
   // Context middleware — inject repo config into all routes
   app.use("*", async (c, next) => {
@@ -54,6 +61,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
   app.route("/api", riskRoutes);
   app.route("/api", searchRoutes);
   app.route("/api", cloneRoutes);
+  app.route("/api", reposRoutes);
   app.route("/api", eventsRoute);
 
   // Health check

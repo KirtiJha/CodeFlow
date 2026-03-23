@@ -91,6 +91,21 @@ analysisRoutes.get("/status", (c) => {
     const nodeStore = new NodeStore(db);
     const edgeStore = new EdgeStore(db);
 
+    // Read persisted stats from repos table
+    const repo = db.prepare("SELECT analyzed_at, stats_json FROM repos LIMIT 1").get() as
+      | { analyzed_at: string | null; stats_json: string | null }
+      | undefined;
+    const persisted = repo?.stats_json ? JSON.parse(repo.stats_json) : {};
+
+    // Languages from DB
+    const langRows = db
+      .prepare("SELECT DISTINCT language FROM nodes WHERE language IS NOT NULL AND language != ''")
+      .all() as { language: string }[];
+    const languages = langRows.map((r) => r.language).sort();
+
+    // DFG edge count
+    const dfgRow = db.prepare("SELECT COUNT(*) as cnt FROM dfg_edges").get() as { cnt: number };
+
     const stats = {
       nodes: nodeStore.count(),
       edges: edgeStore.count(),
@@ -99,6 +114,10 @@ analysisRoutes.get("/status", (c) => {
         nodeStore.countByKind("function") + nodeStore.countByKind("method"),
       classes: nodeStore.countByKind("class"),
       communities: nodeStore.countByKind("community"),
+      languages,
+      dataFlowEdges: dfgRow.cnt,
+      duration: persisted.durationMs ?? null,
+      lastAnalyzed: repo?.analyzed_at ?? null,
     };
 
     return c.json({

@@ -1,4 +1,5 @@
 export { SchemaLinker, detectOrmFramework } from "./schema-linker.js";
+export { SchemaExtractor } from "./schema-extractor.js";
 export type {
   SchemaModel,
   SchemaField,

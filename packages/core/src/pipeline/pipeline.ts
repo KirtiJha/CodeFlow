@@ -45,6 +45,7 @@ import { FlowTracer } from "../processes/flow-tracer.js";
 import { TestDetector } from "../tests/test-detector.js";
 import { TestLinker } from "../tests/test-linker.js";
 import { SchemaLinker } from "../schema/schema-linker.js";
+import { SchemaExtractor } from "../schema/schema-extractor.js";
 import { TaintEngine } from "../taint/taint-engine.js";
 import { ComplexityCalculator } from "../metrics/complexity.js";
 import { CouplingCalculator } from "../metrics/coupling.js";
@@ -136,6 +137,7 @@ export class Pipeline {
         | undefined,
     );
 
+    const languageSet = new Set<string>();
     const stats: PipelineStats = {
       files: 0,
       symbols: 0,
@@ -148,6 +150,7 @@ export class Pipeline {
       schemaModels: 0,
       taintFlows: 0,
       durationMs: 0,
+      languages: [],
     };
 
     progress.start();
@@ -155,6 +158,11 @@ export class Pipeline {
     try {
       // Phase 1: Parsing
       await this.phaseParsing(graph, nodeStore, edgeStore, progress, stats);
+
+      // Collect languages from parsed file nodes
+      for (const node of graph.nodes.values()) {
+        if (node.language) languageSet.add(node.language);
+      }
 
       // Phase 2: Symbols
       const symbolTable = await this.phaseSymbols(
@@ -189,8 +197,11 @@ export class Pipeline {
       // Phase 9: Tests
       await this.phaseTests(graph, nodeStore, progress, stats);
 
+      // Persist graph data BEFORE schema phase (schema refs need nodes in DB)
+      this.persistGraph(graph, nodeStore, edgeStore, repoId, db);
+
       // Phase 10: Schema
-      await this.phaseSchema(graph, progress, stats);
+      await this.phaseSchema(graph, db, repoId, progress, stats);
 
       // Phase 11: Taint
       if (this.config.enableTaint !== false) {
@@ -199,12 +210,20 @@ export class Pipeline {
 
       // Phase 12: Metrics
       await this.phaseMetrics(graph, nodeStore, progress, stats);
-
-      // Persist remaining graph data
-      this.persistGraph(graph, nodeStore, edgeStore, repoId, db);
     } finally {
       const { totalDurationMs } = progress.finish();
       stats.durationMs = totalDurationMs;
+      stats.languages = [...languageSet].sort();
+
+      // Persist stats and timestamp to repos table
+      try {
+        db.prepare(
+          `UPDATE repos SET analyzed_at = datetime('now'), stats_json = ? WHERE id = ?`,
+        ).run(JSON.stringify(stats), repoId);
+      } catch {
+        // Non-critical — don't fail the pipeline
+      }
+
       db.close();
       log.info("Pipeline database closed");
     }
@@ -268,6 +287,10 @@ export class Pipeline {
         graph.addNode(fileNode);
 
         // Create symbol nodes
+        // First pass: create all symbols and track parent names → IDs
+        const parentIdByName = new Map<string, string>();
+        const childSymbols: Array<{ node: GraphNode; parentName: string }> = [];
+
         for (const sym of result.symbols) {
           const symbolNode: GraphNode = {
             id: uuid(),
@@ -284,7 +307,20 @@ export class Pipeline {
             paramCount: sym.paramCount,
             returnType: sym.returnType,
             ownerId: fileNode.id,
+            ...(sym.typeAnnotation
+              ? { metadata: { typeAnnotation: sym.typeAnnotation } }
+              : {}),
           };
+
+          // Track parent symbols (class, interface, enum)
+          if (
+            sym.kind === "class" ||
+            sym.kind === "interface" ||
+            sym.kind === "enum"
+          ) {
+            parentIdByName.set(sym.name, symbolNode.id);
+          }
+
           graph.addNode(symbolNode);
           stats.symbols++;
 
@@ -300,6 +336,26 @@ export class Pipeline {
             kind: "contains",
           });
           stats.edges++;
+
+          // Collect child symbols for parent→child edges
+          if (sym.parentName) {
+            childSymbols.push({ node: symbolNode, parentName: sym.parentName });
+          }
+        }
+
+        // Second pass: create parent→child contains edges
+        for (const { node: childNode, parentName } of childSymbols) {
+          const parentId = parentIdByName.get(parentName);
+          if (parentId) {
+            childNode.ownerId = parentId;
+            graph.addEdge({
+              id: uuid(),
+              sourceId: parentId,
+              targetId: childNode.id,
+              kind: "contains",
+            });
+            stats.edges++;
+          }
         }
 
         // Store imports, calls, heritage for later phases
@@ -713,15 +769,33 @@ export class Pipeline {
 
   private async phaseSchema(
     graph: InMemoryGraph,
+    db: Database.Database,
+    repoId: string,
     progress: ProgressTracker,
     stats: PipelineStats,
   ): Promise<void> {
     progress.beginPhase("schema");
 
-    const linker = new SchemaLinker();
-    // SchemaLinker.linkFields needs pre-detected models; skip in main pipeline
-    stats.schemaModels = 0;
+    const { SchemaStore } = await import("../storage/schema-store.js");
+    const schemaStore = new SchemaStore(db);
 
+    // Extract models from the graph
+    const extractor = new SchemaExtractor();
+    const models = extractor.extract(graph, repoId);
+
+    if (models.length > 0) {
+      schemaStore.clearRepo(repoId);
+      schemaStore.insertModelBatch(models);
+
+      // Link fields to code references
+      const linker = new SchemaLinker();
+      const refs = linker.linkFields(models, graph, repoId);
+      if (refs.length > 0) {
+        schemaStore.insertRefBatch(refs);
+      }
+    }
+
+    stats.schemaModels = models.length;
     progress.updatePhase(100, `Found ${stats.schemaModels} schema models`);
     progress.endPhase();
   }
