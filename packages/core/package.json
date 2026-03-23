@@ -40,6 +40,15 @@
     "./storage/node-store": {
       "import": "./dist/storage/node-store.js"
     },
+    "./storage/dfg-store": {
+      "import": "./dist/storage/dfg-store.js"
+    },
+    "./dfg": {
+      "import": "./dist/dfg/index.js"
+    },
+    "./utils": {
+      "import": "./dist/utils/index.js"
+    },
 
     "./taint": {
       "import": "./dist/taint/index.js"

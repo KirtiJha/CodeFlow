@@ -11,8 +11,15 @@ import type {
 } from "../graph/types.js";
 import { InMemoryGraph } from "../graph/knowledge-graph.js";
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { DataFlowGraph } from "../dfg/dfg-types.js";
+import type { ControlFlowGraph } from "../cfg/cfg-types.js";
+import {
+  SourceRegistry,
+  SinkRegistry,
+  SanitizerRegistry,
+} from "../taint/index.js";
 import {
   initializeSchema,
   withTransaction,
@@ -80,6 +87,13 @@ export class Pipeline {
     >
   > &
     PipelineConfig;
+
+  /** Retained across phases so AST cache survives for CFG/DFG */
+  private parser: CodeParser | null = null;
+  /** CFGs built in Phase 3, consumed by Phase 4 */
+  private cfgCache = new Map<string, ControlFlowGraph>();
+  /** DFGs built in Phase 4, consumed by Phase 11 */
+  private dfgCache = new Map<string, DataFlowGraph>();
 
   constructor(config: PipelineConfig) {
     this.config = {
@@ -215,6 +229,11 @@ export class Pipeline {
       stats.durationMs = totalDurationMs;
       stats.languages = [...languageSet].sort();
 
+      // Release parser and caches
+      this.parser = null;
+      this.cfgCache.clear();
+      this.dfgCache.clear();
+
       // Persist stats and timestamp to repos table
       try {
         db.prepare(
@@ -253,9 +272,10 @@ export class Pipeline {
     stats.files = files.length;
     progress.updatePhase(10, `Found ${files.length} files`);
 
-    // Parse each file
-    const parser = new CodeParser();
-    await parser.initialize();
+    // Parse each file — keep parser alive for CFG/DFG phases
+    this.parser = new CodeParser();
+    await this.parser.initialize();
+    const parser = this.parser;
 
     for (let i = 0; i < files.length; i++) {
       const filePath = files[i];
@@ -502,9 +522,12 @@ export class Pipeline {
     let built = 0;
     for (const fn of functions) {
       try {
-        // CFG needs actual SyntaxNode — skip per-function build in main pipeline
-        // (CFG is built on-demand in workers or analysis phases)
-        built++;
+        const syntaxNode = this.getFunctionSyntaxNode(fn);
+        if (syntaxNode) {
+          const cfg = builder.build(syntaxNode, fn.id);
+          this.cfgCache.set(fn.id, cfg);
+          built++;
+        }
       } catch {
         // Non-critical — skip
       }
@@ -517,6 +540,7 @@ export class Pipeline {
       }
     }
 
+    log.info({ built, total: functions.length }, "CFG phase complete");
     progress.endPhase();
   }
 
@@ -531,6 +555,7 @@ export class Pipeline {
     progress.beginPhase("dfg");
 
     const builder = new DFGBuilder();
+    const repoId = this.config.repoPath; // Will be overwritten to real repoId on persist
     const functions = [...graph.nodes.values()].filter((n) =>
       FUNCTION_KINDS.has(n.kind),
     );
@@ -538,9 +563,21 @@ export class Pipeline {
     let processed = 0;
     for (const fn of functions) {
       try {
-        // DFG needs actual SyntaxNode + CFG — skip per-function build in main pipeline
-        stats.dataFlows += 0;
-        processed++;
+        const syntaxNode = this.getFunctionSyntaxNode(fn);
+        const cfg = this.cfgCache.get(fn.id);
+        if (syntaxNode && cfg) {
+          const dfg = builder.build(syntaxNode, cfg, fn.id, repoId, fn.filePath);
+          this.dfgCache.set(fn.id, dfg);
+
+          // Persist DFG nodes and edges
+          const dfgNodes = [...dfg.nodes.values()];
+          if (dfgNodes.length > 0) {
+            dfgStore.insertNodeBatch(dfgNodes);
+            dfgStore.insertEdgeBatch(dfg.edges);
+            stats.dataFlows += dfg.edges.length;
+          }
+          processed++;
+        }
       } catch {
         // Non-critical
       }
@@ -553,6 +590,7 @@ export class Pipeline {
       }
     }
 
+    log.info({ processed, total: functions.length, dataFlows: stats.dataFlows }, "DFG phase complete");
     progress.endPhase();
   }
 
@@ -809,8 +847,33 @@ export class Pipeline {
   ): Promise<void> {
     progress.beginPhase("taint");
 
-    // Taint engine needs DFGs — skip in main pipeline (worker phase)
-    stats.taintFlows = 0;
+    if (this.dfgCache.size === 0) {
+      log.info("No DFGs available — skipping taint analysis");
+      stats.taintFlows = 0;
+      progress.updatePhase(100, "No DFGs to analyze");
+      progress.endPhase();
+      return;
+    }
+
+    const engine = new TaintEngine(
+      new SourceRegistry(),
+      new SinkRegistry(),
+      new SanitizerRegistry(),
+    );
+
+    const repoId = "";
+    const result = engine.scan(this.dfgCache, repoId);
+    stats.taintFlows = result.flows.length;
+
+    log.info(
+      {
+        flows: result.flows.length,
+        critical: result.summary.critical,
+        warning: result.summary.warning,
+        info: result.summary.info,
+      },
+      "Taint analysis complete",
+    );
 
     progress.updatePhase(100, `Found ${stats.taintFlows} taint flows`);
     progress.endPhase();
@@ -860,6 +923,61 @@ export class Pipeline {
 
     progress.updatePhase(100, `Scored ${processed} functions`);
     progress.endPhase();
+  }
+
+  // ── Helpers ────────────────────────────────────────────────
+
+  /**
+   * Re-parse a source file and find the SyntaxNode for a function by line range.
+   * The parser's AST cache means repeated requests for the same file are fast.
+   */
+  private getFunctionSyntaxNode(fn: GraphNode): import("tree-sitter").SyntaxNode | null {
+    if (!this.parser || !fn.filePath || !fn.startLine) return null;
+    try {
+      const absolutePath = resolve(this.config.repoPath, fn.filePath);
+      const content = readFileSync(absolutePath, "utf-8");
+      const tree = this.parser.parse(absolutePath, content);
+      if (!tree) return null;
+
+      // Walk the tree to find a function node covering fn.startLine
+      const targetLine = fn.startLine - 1; // tree-sitter is 0-based
+      const endLine = (fn.endLine ?? fn.startLine) - 1;
+
+      const find = (node: import("tree-sitter").SyntaxNode): import("tree-sitter").SyntaxNode | null => {
+        if (
+          node.startPosition.row <= targetLine &&
+          node.endPosition.row >= endLine
+        ) {
+          // Check if this is a function-like node
+          if (
+            node.type === "function_declaration" ||
+            node.type === "method_definition" ||
+            node.type === "arrow_function" ||
+            node.type === "function" ||
+            node.type === "function_expression" ||
+            node.type === "generator_function_declaration" ||
+            // Python
+            node.type === "function_definition" ||
+            // Java / Go
+            node.type === "method_declaration" ||
+            node.type === "constructor_declaration" ||
+            node.type === "function_definition"
+          ) {
+            return node;
+          }
+          // Check children for a tighter match
+          for (const child of node.namedChildren) {
+            const result = find(child);
+            if (result) return result;
+          }
+        }
+        return null;
+      };
+
+      return find(tree.rootNode);
+    } catch {
+      return null;
+    }
   }
 
   // ── Persistence ───────────────────────────────────────────
