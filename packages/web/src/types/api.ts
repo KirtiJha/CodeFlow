@@ -48,16 +48,36 @@ export interface RiskScoreResponse {
   level: "low" | "medium" | "high" | "critical";
   factors: RiskFactor[];
   recommendation: string;
-  history?: Array<{ date: string; score: number }>;
+  stats?: {
+    totalFunctions: number;
+    byLevel: Record<string, number>;
+  };
+  fileRisks?: FileRisk[];
 }
 
 export interface RiskFactor {
   name: string;
   weight: number;
-  value: number;
-  description: string;
   score: number;
-  trend: 'up' | 'down' | 'stable';
+  description: string;
+}
+
+export interface FileRisk {
+  file: string;
+  avgScore: number;
+  maxScore: number;
+  functionCount: number;
+  level: "low" | "medium" | "high" | "critical";
+}
+
+export interface RiskHotspot {
+  name: string;
+  file: string;
+  line?: number;
+  score: number;
+  level: "low" | "medium" | "high" | "critical";
+  factors: RiskFactor[];
+  recommendation: string;
 }
 
 export interface SchemaModel {

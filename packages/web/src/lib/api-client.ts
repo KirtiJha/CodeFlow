@@ -1,5 +1,5 @@
 import ky from "ky";
-import type { ApiResponse } from "@/types/api";
+import type { ApiResponse, RiskScoreResponse, RiskHotspot } from "@/types/api";
 import type { TraceMode } from "@/types/trace";
 
 const client = ky.create({
@@ -222,11 +222,11 @@ export const api = {
   riskScore: (target: string) =>
     client
       .post("risk/score", { json: { target } })
-      .json<ApiResponse<unknown>>(),
+      .json<RiskScoreResponse>(),
 
   riskHotspots: (limit?: number) => {
     const params = limit ? `?limit=${limit}` : "";
-    return client.get(`risk/hotspots${params}`).json<ApiResponse<unknown>>();
+    return client.get(`risk/hotspots${params}`).json<{ hotspots: RiskHotspot[] }>();
   },
 
   // Search

@@ -10,8 +10,6 @@ import {
   Hash,
   Database,
   ArrowRight,
-  ExternalLink,
-  Code2,
   Layers,
 } from "lucide-react";
 
@@ -41,8 +39,23 @@ export type ModalView =
   | { kind: "reads"; refs: CodeRef[] }
   | { kind: "writes"; refs: CodeRef[] }
   | { kind: "relations"; relationships: Relationship[]; modelName: string }
-  | { kind: "field"; fieldName: string; type: string; refs: CodeRef[]; summary: FieldSummaryEntry | null; isPK?: boolean; isIndexed?: boolean; nullable?: boolean }
-  | { kind: "finding"; step: { type: string; description: string; breaking: boolean }; refs: CodeRef[]; relationships?: Relationship[]; modelName?: string };
+  | {
+      kind: "field";
+      fieldName: string;
+      type: string;
+      refs: CodeRef[];
+      summary: FieldSummaryEntry | null;
+      isPK?: boolean;
+      isIndexed?: boolean;
+      nullable?: boolean;
+    }
+  | {
+      kind: "finding";
+      step: { type: string; description: string; breaking: boolean };
+      refs: CodeRef[];
+      relationships?: Relationship[];
+      modelName?: string;
+    };
 
 interface SchemaDetailModalProps {
   view: ModalView | null;
@@ -121,15 +134,45 @@ function ModalContent({
 }) {
   switch (view.kind) {
     case "reads":
-      return <RefsView title="Read References" icon={<Eye className="h-4 w-4 text-accent-blue" />} refs={view.refs} filterKind="read" onClose={onClose} />;
+      return (
+        <RefsView
+          title="Read References"
+          icon={<Eye className="h-4 w-4 text-accent-blue" />}
+          refs={view.refs}
+          filterKind="read"
+          onClose={onClose}
+        />
+      );
     case "writes":
-      return <RefsView title="Write References" icon={<Pencil className="h-4 w-4 text-accent-amber" />} refs={view.refs} filterKind="write" onClose={onClose} />;
+      return (
+        <RefsView
+          title="Write References"
+          icon={<Pencil className="h-4 w-4 text-accent-amber" />}
+          refs={view.refs}
+          filterKind="write"
+          onClose={onClose}
+        />
+      );
     case "relations":
-      return <RelationsView relationships={view.relationships} modelName={view.modelName} onClose={onClose} />;
+      return (
+        <RelationsView
+          relationships={view.relationships}
+          modelName={view.modelName}
+          onClose={onClose}
+        />
+      );
     case "field":
       return <FieldDetailView {...view} onClose={onClose} />;
     case "finding":
-      return <FindingDetailView step={view.step} refs={view.refs} relationships={view.relationships} modelName={view.modelName} onClose={onClose} />;
+      return (
+        <FindingDetailView
+          step={view.step}
+          refs={view.refs}
+          relationships={view.relationships}
+          modelName={view.modelName}
+          onClose={onClose}
+        />
+      );
   }
 }
 
@@ -158,7 +201,9 @@ function ModalHeader({
               {title}
             </h3>
             {badge && (
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.color}`}>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.color}`}
+              >
                 {badge.label}
               </span>
             )}
@@ -223,7 +268,10 @@ function RefsView({
       />
       <div className="flex-1 overflow-auto p-4 space-y-3">
         {grouped.map(([file, fileRefs]) => (
-          <div key={file} className="rounded-lg border border-border-default overflow-hidden">
+          <div
+            key={file}
+            className="rounded-lg border border-border-default overflow-hidden"
+          >
             <div className="flex items-center gap-2 bg-bg-elevated px-3 py-2">
               <FileCode className="h-3 w-3 text-text-muted flex-shrink-0" />
               <span className="text-[11px] font-mono text-text-secondary truncate">
@@ -242,11 +290,13 @@ function RefsView({
                   <span className="font-mono text-text-muted w-10 text-right flex-shrink-0">
                     :{r.line}
                   </span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                    r.kind === "write" || r.kind === "migration"
-                      ? "bg-accent-amber/10 text-accent-amber"
-                      : "bg-accent-blue/10 text-accent-blue"
-                  }`}>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                      r.kind === "write" || r.kind === "migration"
+                        ? "bg-accent-amber/10 text-accent-amber"
+                        : "bg-accent-blue/10 text-accent-blue"
+                    }`}
+                  >
                     {r.kind}
                   </span>
                   <span className="font-mono text-text-primary truncate">
@@ -314,7 +364,9 @@ function RelationsView({
                 </div>
 
                 {/* Type badge */}
-                <span className={`rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium ${color}`}>
+                <span
+                  className={`rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium ${color}`}
+                >
                   {label}
                 </span>
               </div>
@@ -387,9 +439,15 @@ function FieldDetailView({
         }
         badge={
           isPK
-            ? { label: "Primary Key", color: "bg-accent-amber/10 text-accent-amber" }
+            ? {
+                label: "Primary Key",
+                color: "bg-accent-amber/10 text-accent-amber",
+              }
             : isIndexed
-              ? { label: "Indexed", color: "bg-accent-blue/10 text-accent-blue" }
+              ? {
+                  label: "Indexed",
+                  color: "bg-accent-blue/10 text-accent-blue",
+                }
               : nullable
                 ? { label: "Nullable", color: "bg-bg-elevated text-text-muted" }
                 : undefined
@@ -429,7 +487,10 @@ function FieldDetailView({
           Code References
         </div>
         {grouped.map(([file, fileRefs]) => (
-          <div key={file} className="rounded-lg border border-border-default overflow-hidden">
+          <div
+            key={file}
+            className="rounded-lg border border-border-default overflow-hidden"
+          >
             <div className="flex items-center gap-2 bg-bg-elevated px-3 py-2">
               <FileCode className="h-3 w-3 text-text-muted flex-shrink-0" />
               <span className="text-[11px] font-mono text-text-secondary truncate">
@@ -448,11 +509,13 @@ function FieldDetailView({
                   <span className="font-mono text-text-muted w-10 text-right flex-shrink-0">
                     :{r.line}
                   </span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                    r.kind === "write" || r.kind === "migration"
-                      ? "bg-accent-amber/10 text-accent-amber"
-                      : "bg-accent-blue/10 text-accent-blue"
-                  }`}>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                      r.kind === "write" || r.kind === "migration"
+                        ? "bg-accent-amber/10 text-accent-amber"
+                        : "bg-accent-blue/10 text-accent-blue"
+                    }`}
+                  >
                     {r.kind}
                   </span>
                   <span className="font-mono text-text-primary truncate">
@@ -494,8 +557,7 @@ function FindingDetailView({
   const filtered = useMemo(() => {
     if (step.type === "review_writes")
       return refs.filter((r) => r.kind === "write" || r.kind === "migration");
-    if (step.type === "review_references")
-      return refs;
+    if (step.type === "review_references") return refs;
     return refs;
   }, [refs, step.type]);
 
@@ -523,14 +585,17 @@ function FindingDetailView({
       />
 
       <div className="flex-1 overflow-auto p-4 space-y-3">
-        {step.type === "review_relationships" && relationships && relationships.length > 0 ? (
+        {step.type === "review_relationships" &&
+        relationships &&
+        relationships.length > 0 ? (
           <>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                 Relationships
               </span>
               <span className="text-[10px] text-text-muted">
-                {relationships.length} connection{relationships.length !== 1 ? "s" : ""}
+                {relationships.length} connection
+                {relationships.length !== 1 ? "s" : ""}
               </span>
             </div>
             {relationships.map((rel, i) => {
@@ -556,13 +621,17 @@ function FindingDetailView({
                         {shortName(other)}
                       </span>
                     </div>
-                    <span className={`rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium ${color}`}>
+                    <span
+                      className={`rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium ${color}`}
+                    >
                       {label}
                     </span>
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-[10px] text-text-muted">
                     <span>via field:</span>
-                    <span className="font-mono text-text-secondary font-medium">{rel.field}</span>
+                    <span className="font-mono text-text-secondary font-medium">
+                      {rel.field}
+                    </span>
                   </div>
                 </motion.div>
               );
@@ -583,7 +652,10 @@ function FindingDetailView({
               </span>
             </div>
             {grouped.map(([file, fileRefs]) => (
-              <div key={file} className="rounded-lg border border-border-default overflow-hidden">
+              <div
+                key={file}
+                className="rounded-lg border border-border-default overflow-hidden"
+              >
                 <div className="flex items-center gap-2 bg-bg-elevated px-3 py-2">
                   <FileCode className="h-3 w-3 text-text-muted flex-shrink-0" />
                   <span className="text-[11px] font-mono text-text-secondary truncate">
@@ -602,11 +674,13 @@ function FindingDetailView({
                       <span className="font-mono text-text-muted w-10 text-right flex-shrink-0">
                         :{r.line}
                       </span>
-                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                        r.kind === "write" || r.kind === "migration"
-                          ? "bg-accent-amber/10 text-accent-amber"
-                          : "bg-accent-blue/10 text-accent-blue"
-                      }`}>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                          r.kind === "write" || r.kind === "migration"
+                            ? "bg-accent-amber/10 text-accent-amber"
+                            : "bg-accent-blue/10 text-accent-blue"
+                        }`}
+                      >
                         {r.kind}
                       </span>
                       <span className="font-mono text-text-primary truncate">
