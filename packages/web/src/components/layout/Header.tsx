@@ -6,7 +6,7 @@ import { useAnalysisStore } from "@/stores/analysis-store";
 import { ROUTES } from "@/lib/constants";
 
 const PAGE_TITLES: Record<string, string> = {
-  [ROUTES.onboarding]: "Welcome",
+  [ROUTES.onboarding]: "",
   [ROUTES.dashboard]: "Dashboard",
   [ROUTES.trace]: "Data Flow Trace",
   [ROUTES.branches]: "Branch Conflicts",

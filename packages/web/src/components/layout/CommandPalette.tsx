@@ -95,8 +95,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
       if (item.type === "command") {
         navigate(item.route);
+      } else if (item.type === "result") {
+        // Navigate to trace page with this symbol's file as context
+        navigate(`${ROUTES.trace}?file=${encodeURIComponent(item.file)}&symbol=${encodeURIComponent(item.name)}`);
       }
-      // For search results, navigate to trace with file context
       onOpenChange(false);
     },
     [allItems, navigate, onOpenChange],

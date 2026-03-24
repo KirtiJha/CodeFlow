@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -11,10 +11,10 @@ import {
   Network,
   Settings,
   ChevronLeft,
-  Workflow,
 } from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { CodeFlowLogo } from "@/components/shared/CodeFlowLogo";
 import { ROUTES } from "@/lib/constants";
 
 interface SidebarProps {
@@ -36,6 +36,7 @@ const navItems = [
 export function Sidebar({ collapsed }: SidebarProps) {
   const { toggleSidebar } = useUIStore();
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <motion.aside
@@ -44,11 +45,12 @@ export function Sidebar({ collapsed }: SidebarProps) {
       transition={{ duration: 0.2, ease: "easeInOut" }}
       className="relative flex h-full flex-col border-r border-border-default bg-bg-surface"
     >
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-border-default px-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent-blue to-accent-purple">
-          <Workflow className="h-4.5 w-4.5 text-white" />
-        </div>
+      {/* Logo — clickable, navigates to landing */}
+      <button
+        onClick={() => navigate(ROUTES.onboarding)}
+        className="flex h-14 items-center gap-2.5 border-b border-border-default px-3 transition-colors hover:bg-bg-elevated/40 cursor-pointer"
+      >
+        <CodeFlowLogo size={32} />
         {!collapsed && (
           <motion.span
             initial={{ opacity: 0 }}
@@ -58,7 +60,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
             CodeFlow
           </motion.span>
         )}
-      </div>
+      </button>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-2">

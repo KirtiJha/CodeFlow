@@ -23,6 +23,20 @@ export default function App() {
   const { sidebarCollapsed, commandPaletteOpen, setCommandPaletteOpen } =
     useUIStore();
 
+  // Global Cmd+K / Ctrl+K shortcut to open command palette
+  // Use capture phase to intercept before browser handles it (e.g. address bar)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        setCommandPaletteOpen(!useUIStore.getState().commandPaletteOpen);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [setCommandPaletteOpen]);
+
   // Periodically check backend connectivity
   useEffect(() => {
     const { setConnected } = useAppStore.getState();
