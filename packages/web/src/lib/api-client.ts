@@ -2,8 +2,12 @@ import ky from "ky";
 import type { ApiResponse, RiskScoreResponse, RiskHotspot } from "@/types/api";
 import type { TraceMode } from "@/types/trace";
 
+// In production (Vercel), VITE_API_URL can point to the backend server.
+// In dev, Vite's proxy handles /api → localhost:3100.
+const apiBase = import.meta.env.VITE_API_URL || "/api";
+
 const client = ky.create({
-  prefixUrl: "/api",
+  prefixUrl: apiBase,
   timeout: 60000,
   retry: { limit: 2, methods: ["get"] },
   hooks: {
