@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: codeflow-api
+    runtime: docker
+    repo: https://github.com/KirtiJha/CodeFlow
+    branch: main
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "3100"
+    disk:
+      name: codeflow-data
+      mountPath: /data
+      sizeGB: 1
+    healthCheckPath: /health
